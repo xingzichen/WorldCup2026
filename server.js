@@ -1,10 +1,32 @@
 import { createServer } from "node:http";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
+import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "public");
+
+function loadLocalEnv() {
+  try {
+    const envFile = readFileSync(join(__dirname, ".env.local"), "utf8");
+    for (const line of envFile.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const separator = trimmed.indexOf("=");
+      if (separator === -1) continue;
+
+      const key = trimmed.slice(0, separator).trim();
+      const value = trimmed.slice(separator + 1).trim().replace(/^['"]|['"]$/g, "");
+      if (!process.env[key]) process.env[key] = value;
+    }
+  } catch {
+    // Local env is optional; production can use real environment variables.
+  }
+}
+
+loadLocalEnv();
+
 const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 5173);
 
@@ -12,6 +34,60 @@ const SCOREBOARD_URL =
   "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719&limit=200";
 const STANDINGS_URL =
   "https://site.web.api.espn.com/apis/v2/sports/soccer/fifa.world/standings";
+const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY || "";
+const THE_ODDS_API_SPORT_KEY = process.env.THE_ODDS_API_SPORT_KEY || "soccer_fifa_world_cup";
+const THE_ODDS_API_BOOKMAKERS =
+  process.env.THE_ODDS_API_BOOKMAKERS || "williamhill,ladbrokes_uk,bet365";
+const THE_ODDS_API_URL =
+  `https://api.the-odds-api.com/v4/sports/${THE_ODDS_API_SPORT_KEY}/odds/`;
+const ODDS_REFRESH_TIMEZONE = process.env.ODDS_REFRESH_TIMEZONE || "Asia/Shanghai";
+const ODDS_REFRESH_START_HOUR = Number(process.env.ODDS_REFRESH_START_HOUR || 8);
+const ODDS_REFRESH_END_HOUR = Number(process.env.ODDS_REFRESH_END_HOUR || 20);
+const ODDS_REFRESH_INTERVAL_MS = Number(process.env.ODDS_REFRESH_INTERVAL_MS || 3 * 60 * 60 * 1000);
+const ODDS_CACHE_FILE = process.env.ODDS_CACHE_FILE || join(__dirname, "data", "odds-cache.json");
+
+function loadPersistedOddsCache() {
+  try {
+    const persisted = JSON.parse(readFileSync(ODDS_CACHE_FILE, "utf8"));
+    return {
+      expiresAt: Number(persisted.expiresAt ?? 0),
+      fetchedAt: persisted.fetchedAt ?? "",
+      data: Array.isArray(persisted.data) ? persisted.data : [],
+      status: persisted.status ?? "persisted",
+      error: persisted.error ?? ""
+    };
+  } catch {
+    return {
+      expiresAt: 0,
+      fetchedAt: "",
+      data: [],
+      status: "empty",
+      error: ""
+    };
+  }
+}
+
+function persistOddsCache(cache) {
+  try {
+    mkdirSync(dirname(ODDS_CACHE_FILE), { recursive: true });
+    writeFileSync(
+      ODDS_CACHE_FILE,
+      JSON.stringify(
+        {
+          ...cache,
+          persistedAt: new Date().toISOString()
+        },
+        null,
+        2
+      )
+    );
+  } catch (error) {
+    console.warn(`Failed to persist odds cache: ${error.message}`);
+  }
+}
+
+let oddsApiCache = loadPersistedOddsCache();
+let oddsApiRequest = null;
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -47,6 +123,117 @@ function pickCompetitor(competition, side) {
   };
 }
 
+function formatOddsValue(value) {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value === "number") {
+    if (Number.isInteger(value) && Math.abs(value) >= 100) return value > 0 ? `+${value}` : String(value);
+    return String(value);
+  }
+  return String(value);
+}
+
+function normalizeOdds(competition) {
+  return (competition.odds ?? [])
+    .filter(Boolean)
+    .map((odds) => ({
+      provider: odds.provider?.name ?? odds.provider?.displayName ?? odds.provider ?? "",
+      details: odds.details ?? odds.summary ?? "",
+      overUnder: odds.overUnder ?? null,
+      spread: odds.spread ?? null,
+      opening: {
+        home: "",
+        draw: "",
+        away: ""
+      },
+      current: {
+        home: formatOddsValue(
+          odds.homeTeamOdds?.displayOdds ??
+            odds.homeTeamOdds?.moneyLine ??
+            odds.homeTeamOdds?.current?.displayOdds ??
+            odds.homeMoneyline ??
+            odds.home
+        ),
+        draw: formatOddsValue(
+          odds.drawOdds?.displayOdds ??
+            odds.drawOdds?.moneyLine ??
+            odds.drawOdds?.current?.displayOdds ??
+            odds.drawMoneyline ??
+            odds.draw
+        ),
+        away: formatOddsValue(
+          odds.awayTeamOdds?.displayOdds ??
+            odds.awayTeamOdds?.moneyLine ??
+            odds.awayTeamOdds?.current?.displayOdds ??
+            odds.awayMoneyline ??
+            odds.away
+        )
+      }
+    }));
+}
+
+function normalizeTeamKey(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function matchOddsKey(homeTeam, awayTeam, date) {
+  const day = new Date(date).toISOString().slice(0, 10);
+  return [normalizeTeamKey(homeTeam), normalizeTeamKey(awayTeam), day].join("|");
+}
+
+function normalizeTheOddsApiBookmakerOdds(oddsEvent) {
+  return (oddsEvent.bookmakers ?? [])
+    .map((bookmaker) => {
+      const h2h = (bookmaker.markets ?? []).find((market) => market.key === "h2h");
+      const outcomes = h2h?.outcomes ?? [];
+      const findOutcome = (name) =>
+        outcomes.find((outcome) => normalizeTeamKey(outcome.name) === normalizeTeamKey(name));
+      const draw = outcomes.find((outcome) => /^draw$/i.test(outcome.name));
+
+      return {
+        provider: bookmaker.title ?? bookmaker.key ?? "",
+        bookmakerKey: bookmaker.key ?? "",
+        lastUpdate: h2h?.last_update ?? bookmaker.last_update ?? "",
+        details: "h2h",
+        overUnder: null,
+        spread: null,
+        current: {
+          home: formatOddsValue(findOutcome(oddsEvent.home_team)?.price),
+          draw: formatOddsValue(draw?.price),
+          away: formatOddsValue(findOutcome(oddsEvent.away_team)?.price)
+        }
+      };
+    })
+    .filter((bookmaker) =>
+      [bookmaker.current.home, bookmaker.current.draw, bookmaker.current.away].some(Boolean)
+    );
+}
+
+function buildOddsIndex(oddsEvents = []) {
+  const index = new Map();
+  for (const event of oddsEvents) {
+    const bookmakerOdds = normalizeTheOddsApiBookmakerOdds(event);
+    if (bookmakerOdds.length) {
+      index.set(matchOddsKey(event.home_team, event.away_team, event.commence_time), bookmakerOdds);
+    }
+  }
+  return index;
+}
+
+function mergePreferredOdds(match, oddsIndex, oddsCacheStatus) {
+  const preferredOdds = oddsIndex.get(matchOddsKey(match.home.name, match.away.name, match.date));
+  if (preferredOdds?.length) {
+    return { ...match, odds: preferredOdds, oddsSource: "The Odds API" };
+  }
+
+  return {
+    ...match,
+    odds: [],
+    oddsSource: oddsCacheStatus
+  };
+}
+
 function normalizeEvent(event) {
   const competition = event.competitions?.[0] ?? {};
   const status = competition.status?.type ?? {};
@@ -69,7 +256,8 @@ function normalizeEvent(event) {
       country: competition.venue?.address?.country ?? ""
     },
     home: pickCompetitor(competition, "home"),
-    away: pickCompetitor(competition, "away")
+    away: pickCompetitor(competition, "away"),
+    odds: normalizeOdds(competition)
   };
 }
 
@@ -135,18 +323,141 @@ async function fetchJson(url) {
   return response.json();
 }
 
+function zonedParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: ODDS_REFRESH_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).formatToParts(date);
+
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
+function refreshWindowState(date = new Date()) {
+  const parts = zonedParts(date);
+  const hour = Number(parts.hour);
+  return {
+    hour,
+    isOpen: hour >= ODDS_REFRESH_START_HOUR && hour < ODDS_REFRESH_END_HOUR
+  };
+}
+
+async function fetchTheOddsApiJson(url) {
+  const response = await fetch(url, {
+    headers: {
+      "accept": "application/json",
+      "user-agent": "world-cup-schedule-local-site/1.0"
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`The Odds API request failed: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+async function refreshTheOddsApiOdds() {
+  const url = new URL(THE_ODDS_API_URL);
+  url.searchParams.set("apiKey", THE_ODDS_API_KEY);
+  url.searchParams.set("regions", "uk");
+  url.searchParams.set("markets", "h2h");
+  url.searchParams.set("oddsFormat", "decimal");
+  url.searchParams.set("dateFormat", "iso");
+  url.searchParams.set("bookmakers", THE_ODDS_API_BOOKMAKERS);
+  url.searchParams.set("commenceTimeFrom", "2026-06-11T00:00:00Z");
+  url.searchParams.set("commenceTimeTo", "2026-07-20T00:00:00Z");
+
+  try {
+    const payload = await fetchTheOddsApiJson(url);
+    oddsApiCache = {
+      expiresAt: Date.now() + ODDS_REFRESH_INTERVAL_MS,
+      fetchedAt: new Date().toISOString(),
+      data: Array.isArray(payload) ? payload : [],
+      status: "ready",
+      error: ""
+    };
+    persistOddsCache(oddsApiCache);
+  } catch (error) {
+    console.warn(`The Odds API request failed: ${error.message}`);
+    oddsApiCache = {
+      expiresAt: Date.now() + ODDS_REFRESH_INTERVAL_MS,
+      fetchedAt: new Date().toISOString(),
+      data: oddsApiCache.data ?? [],
+      status: oddsApiCache.data?.length ? "stale_error" : "error",
+      error: error.message
+    };
+    persistOddsCache(oddsApiCache);
+  } finally {
+    oddsApiRequest = null;
+  }
+
+  return oddsApiCache;
+}
+
+async function getOddsApiCached() {
+  if (!THE_ODDS_API_KEY) {
+    return {
+      expiresAt: 0,
+      fetchedAt: "",
+      data: [],
+      status: "not_configured",
+      error: ""
+    };
+  }
+
+  const windowState = refreshWindowState();
+  if (!windowState.isOpen) {
+    return {
+      ...oddsApiCache,
+      status: oddsApiCache.data.length ? "outside_window" : "outside_window_empty"
+    };
+  }
+
+  if (oddsApiCache.expiresAt > Date.now()) {
+    return oddsApiCache;
+  }
+
+  if (!oddsApiRequest) {
+    oddsApiRequest = refreshTheOddsApiOdds();
+  }
+
+  return oddsApiRequest;
+}
+
 async function getWorldCupData() {
-  const [scoreboard, standings] = await Promise.all([
+  const [scoreboard, standings, oddsCache] = await Promise.all([
     fetchJson(SCOREBOARD_URL),
-    fetchJson(STANDINGS_URL)
+    fetchJson(STANDINGS_URL),
+    getOddsApiCached()
   ]);
 
+  const oddsIndex = buildOddsIndex(oddsCache.data);
   const matches = (scoreboard.events ?? [])
     .map(normalizeEvent)
+    .map((match) => mergePreferredOdds(match, oddsIndex, oddsCache.status))
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
   return {
     source: "ESPN public soccer APIs",
+    oddsSource: THE_ODDS_API_KEY
+      ? `The Odds API cached odds (${THE_ODDS_API_BOOKMAKERS})`
+      : "Set THE_ODDS_API_KEY to enable The Odds API odds",
+    oddsCache: {
+      status: oddsCache.status,
+      fetchedAt: oddsCache.fetchedAt,
+      expiresAt: oddsCache.expiresAt ? new Date(oddsCache.expiresAt).toISOString() : "",
+      ttlMinutes: Math.round(ODDS_REFRESH_INTERVAL_MS / 60000),
+      error: oddsCache.error,
+      timezone: ODDS_REFRESH_TIMEZONE,
+      refreshWindow: `${ODDS_REFRESH_START_HOUR}:00-${ODDS_REFRESH_END_HOUR}:00`
+    },
     fetchedAt: new Date().toISOString(),
     matches,
     standings: normalizeStandings(standings)

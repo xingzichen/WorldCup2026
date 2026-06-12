@@ -433,6 +433,139 @@ select {
   line-height: 1.4;
 }
 
+.odds-section {
+  margin-top: 0;
+}
+
+.odds-list {
+  display: grid;
+  gap: 12px;
+}
+
+.odds-cache-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.odds-cache-status strong {
+  color: var(--ink);
+}
+
+.odds-cache-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.odds-cache-dot.ready {
+  background: var(--accent);
+}
+
+.odds-cache-dot.error,
+.odds-cache-dot.not_configured {
+  background: var(--danger);
+}
+
+.odds-cache-dot.stale_error {
+  background: var(--gold);
+}
+
+.odds-cache-dot.outside_window,
+.odds-cache-dot.outside_window_empty {
+  background: var(--gold);
+}
+
+.odds-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.odds-match {
+  display: grid;
+  grid-template-columns: minmax(120px, 170px) 1fr minmax(160px, 220px);
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+}
+
+.odds-markets {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.odds-market,
+.odds-empty {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--soft);
+}
+
+.odds-provider {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.odds-provider strong {
+  color: var(--ink);
+}
+
+.odds-prices {
+  display: grid;
+  gap: 6px;
+}
+
+.odds-price-set {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  align-items: stretch;
+}
+
+.odds-price-set > div {
+  display: grid;
+  gap: 4px;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+  text-align: center;
+}
+
+.odds-prices span,
+.odds-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.odds-prices strong {
+  font-size: 18px;
+}
+
 .group-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
@@ -621,11 +754,17 @@ select {
   .toolbar,
   .summary-grid,
   .recent-results-grid,
+  .odds-card,
+  .odds-match,
   .match-card {
     grid-template-columns: 1fr;
   }
 
   .recent-result-main {
+    grid-template-columns: 1fr;
+  }
+
+  .odds-price-set {
     grid-template-columns: 1fr;
   }
 

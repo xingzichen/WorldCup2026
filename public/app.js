@@ -7,6 +7,7 @@ const messages = {
     fetchFailedDetail: "无法获取最新数据",
     scheduleTab: "赛程",
     resultsTab: "赛果与出线形势",
+    oddsTab: "赔率",
     searchLabel: "搜索",
     searchPlaceholder: "球队、城市、球场",
     statusLabel: "状态",
@@ -27,6 +28,23 @@ const messages = {
     updatedLabel: "更新时间",
     completedResults: "已完赛结果",
     recentResults: "最近完赛",
+    oddsTitle: "每场赔率",
+    oddsHint: "使用 The Odds API。北京时间 08:00-20:00 每 3 小时最多更新一次；20:00 后不更新，继续展示上次缓存。",
+    oddsUnavailable: "暂无赔率",
+    oddsNotConfigured: "未配置 The Odds API 赔率数据源",
+    oddsCacheReady: "赔率缓存已更新",
+    oddsCacheError: "赔率缓存请求失败",
+    oddsCacheStale: "正在使用上次缓存",
+    oddsCacheClosed: "当前不在赔率刷新时段",
+    oddsCacheClosedEmpty: "当前不在赔率刷新时段，且暂无缓存",
+    oddsCacheExpires: "缓存到期",
+    oddsProvider: "赔率来源",
+    currentOdds: "即时",
+    homeWin: "主胜",
+    drawResult: "平局",
+    awayWin: "客胜",
+    totalGoals: "大小球",
+    spread: "让球",
     groupOutlook: "小组出线形势",
     qualificationHint: "每组前二进入 32 强，12 个小组第三名中成绩最好的 8 队也晋级。",
     thirdPlaceRace: "第三名竞争区",
@@ -66,6 +84,7 @@ const messages = {
     fetchFailedDetail: "Unable to fetch latest data",
     scheduleTab: "Schedule",
     resultsTab: "Results & Qualification",
+    oddsTab: "Odds",
     searchLabel: "Search",
     searchPlaceholder: "Team, city, venue",
     statusLabel: "Status",
@@ -86,6 +105,23 @@ const messages = {
     updatedLabel: "Updated",
     completedResults: "Completed Results",
     recentResults: "Recent Results",
+    oddsTitle: "Match Odds",
+    oddsHint: "Uses The Odds API. From 08:00 to 20:00 Beijing time, the server refreshes at most once every 3 hours. After 20:00 it keeps the last cache.",
+    oddsUnavailable: "Odds unavailable",
+    oddsNotConfigured: "The Odds API is not configured",
+    oddsCacheReady: "Odds cache updated",
+    oddsCacheError: "Odds cache request failed",
+    oddsCacheStale: "Using previous cache",
+    oddsCacheClosed: "Outside odds refresh window",
+    oddsCacheClosedEmpty: "Outside refresh window and no cache yet",
+    oddsCacheExpires: "Cache expires",
+    oddsProvider: "Provider",
+    currentOdds: "Current",
+    homeWin: "Home",
+    drawResult: "Draw",
+    awayWin: "Away",
+    totalGoals: "Total",
+    spread: "Spread",
     groupOutlook: "Group Qualification Outlook",
     qualificationHint: "The top two teams in each group advance to the Round of 32, along with the eight best third-place teams.",
     thirdPlaceRace: "Third-Place Race",
@@ -298,7 +334,10 @@ const els = {
   refreshState: document.querySelector("#refreshState"),
   scheduleView: document.querySelector("#scheduleView"),
   resultsView: document.querySelector("#resultsView"),
+  oddsView: document.querySelector("#oddsView"),
   scheduleList: document.querySelector("#scheduleList"),
+  oddsList: document.querySelector("#oddsList"),
+  oddsCacheStatus: document.querySelector("#oddsCacheStatus"),
   recentResultsList: document.querySelector("#recentResultsList"),
   standingsGrid: document.querySelector("#standingsGrid"),
   thirdPlaceTable: document.querySelector("#thirdPlaceTable"),
@@ -548,6 +587,85 @@ function recentResultCard(match) {
   `;
 }
 
+function oddsValue(value) {
+  return value || "—";
+}
+
+function priceSetMarkup(prices) {
+  return `
+    <div class="odds-price-set">
+      <div>
+        <span>${escapeHtml(t("homeWin"))}</span>
+        <strong>${escapeHtml(oddsValue(prices?.home))}</strong>
+      </div>
+      <div>
+        <span>${escapeHtml(t("drawResult"))}</span>
+        <strong>${escapeHtml(oddsValue(prices?.draw))}</strong>
+      </div>
+      <div>
+        <span>${escapeHtml(t("awayWin"))}</span>
+        <strong>${escapeHtml(oddsValue(prices?.away))}</strong>
+      </div>
+    </div>
+  `;
+}
+
+function oddsMarketMarkup(match, market) {
+  const provider = market.provider || t("oddsProvider");
+  const extra = [
+    market.details,
+    market.lastUpdate ? `${t("updatedLabel")} ${updateText(new Date(market.lastUpdate))}` : "",
+    market.overUnder !== null ? `${t("totalGoals")} ${market.overUnder}` : "",
+    market.spread !== null ? `${t("spread")} ${market.spread}` : ""
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return `
+    <div class="odds-market">
+      <div class="odds-provider">
+        <strong>${escapeHtml(provider)}</strong>
+        ${extra ? `<span>${escapeHtml(extra)}</span>` : ""}
+      </div>
+      <div class="odds-prices">
+        ${priceSetMarkup(market.current ?? market)}
+      </div>
+    </div>
+  `;
+}
+
+function oddsCard(match) {
+  const date = new Date(match.date);
+  const unavailableText = {
+    not_configured: t("oddsNotConfigured"),
+    outside_window_empty: t("oddsCacheClosedEmpty"),
+    outside_window: t("oddsCacheClosed"),
+    error: t("oddsCacheError"),
+    stale_error: t("oddsCacheStale")
+  }[match.oddsSource] ?? t("oddsUnavailable");
+  const markets = match.odds?.length
+    ? match.odds.map((market) => oddsMarketMarkup(match, market)).join("")
+    : `<div class="odds-empty">${escapeHtml(unavailableText)}</div>`;
+
+  return `
+    <article class="odds-card">
+      <div class="odds-match">
+        <div class="match-time">
+          <strong>${timeText(date)}</strong>
+          <span>${escapeHtml(dayText(date))}</span>
+        </div>
+        <div class="teams">
+          <div class="team">${teamMarkup(match.home)}</div>
+          <div class="score">${escapeHtml(matchScore(match))}</div>
+          <div class="team">${teamMarkup(match.away)}</div>
+        </div>
+        <div class="venue">${venueText(match)}</div>
+      </div>
+      <div class="odds-markets">${markets}</div>
+    </article>
+  `;
+}
+
 function emptyNode() {
   const node = els.emptyTemplate.content.firstElementChild.cloneNode(true);
   node.textContent = t("empty");
@@ -606,6 +724,34 @@ function filteredMatches() {
 
 function renderSchedule() {
   renderMatchList(els.scheduleList, filteredMatches(), true);
+}
+
+function renderOdds() {
+  els.oddsList.innerHTML = state.data.matches.map(oddsCard).join("");
+  renderOddsCacheStatus();
+}
+
+function renderOddsCacheStatus() {
+  const cache = state.data.oddsCache ?? {};
+  const statusText = {
+    ready: t("oddsCacheReady"),
+    stale_error: t("oddsCacheStale"),
+    error: t("oddsCacheError"),
+    not_configured: t("oddsNotConfigured"),
+    outside_window: t("oddsCacheClosed"),
+    outside_window_empty: t("oddsCacheClosedEmpty")
+  }[cache.status] ?? t("oddsUnavailable");
+
+  const details = [];
+  if (cache.fetchedAt) details.push(`${t("updatedLabel")} ${updateText(new Date(cache.fetchedAt))}`);
+  if (cache.expiresAt) details.push(`${t("oddsCacheExpires")} ${updateText(new Date(cache.expiresAt))}`);
+  if (cache.error) details.push(cache.error);
+
+  els.oddsCacheStatus.innerHTML = `
+    <span class="odds-cache-dot ${escapeHtml(cache.status ?? "unknown")}"></span>
+    <strong>${escapeHtml(statusText)}</strong>
+    ${details.length ? `<span>${escapeHtml(details.join(" · "))}</span>` : ""}
+  `;
 }
 
 function renderRecentResults(matches) {
@@ -829,6 +975,7 @@ function renderAll() {
   els.refreshState.textContent = `${t("updated")} ${updateText(new Date(state.data.fetchedAt))}`;
   renderSchedule();
   renderResults();
+  renderOdds();
 }
 
 function setView(view) {
@@ -838,6 +985,7 @@ function setView(view) {
   });
   els.scheduleView.classList.toggle("active", view === "schedule");
   els.resultsView.classList.toggle("active", view === "results");
+  els.oddsView.classList.toggle("active", view === "odds");
 }
 
 function setLanguage(lang) {

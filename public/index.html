@@ -24,6 +24,7 @@
     <nav class="tabs" aria-label="页面">
       <button class="tab active" data-view="schedule" data-i18n="scheduleTab" type="button">赛程</button>
       <button class="tab" data-view="results" data-i18n="resultsTab" type="button">赛果与出线形势</button>
+      <button class="tab" data-view="odds" data-i18n="oddsTab" type="button">赔率</button>
     </nav>
 
     <main>
@@ -90,6 +91,15 @@
           <div class="third-table-wrap">
             <table class="standings-table" id="thirdPlaceTable"></table>
           </div>
+        </section>
+      </section>
+
+      <section class="panel" id="oddsView">
+        <section class="section-block odds-section">
+          <h2 data-i18n="oddsTitle">每场赔率</h2>
+          <p class="hint" data-i18n="oddsHint">赔率来自实时数据源；未开盘或数据源未提供时会显示暂无赔率。</p>
+          <div class="odds-cache-status" id="oddsCacheStatus"></div>
+          <div class="odds-list" id="oddsList"></div>
         </section>
       </section>
     </main>
