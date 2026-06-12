@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>2026 世界杯赛程</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">2026 FIFA World Cup</p>
+        <h1 data-i18n="title">世界杯赛程与实时赛果</h1>
+      </div>
+      <div class="header-actions">
+        <div class="lang-switch" aria-label="Language">
+          <button class="lang-btn active" data-lang="zh" type="button">中文</button>
+          <button class="lang-btn" data-lang="en" type="button">EN</button>
+        </div>
+        <div class="status-pill" id="refreshState" data-i18n="loading">正在获取最新数据</div>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="页面">
+      <button class="tab active" data-view="schedule" data-i18n="scheduleTab" type="button">赛程</button>
+      <button class="tab" data-view="results" data-i18n="resultsTab" type="button">赛果与出线形势</button>
+    </nav>
+
+    <main>
+      <section class="panel active" id="scheduleView">
+        <div class="toolbar">
+          <label class="search-box">
+            <span data-i18n="searchLabel">搜索</span>
+            <input id="matchSearch" type="search" placeholder="球队、城市、球场" />
+          </label>
+          <label class="select-box">
+            <span data-i18n="statusLabel">状态</span>
+            <select id="statusFilter">
+              <option value="all" data-i18n="all">全部</option>
+              <option value="pre" data-i18n="scheduled">未开赛</option>
+              <option value="in" data-i18n="live">进行中</option>
+              <option value="post" data-i18n="completed">已完赛</option>
+            </select>
+          </label>
+          <label class="select-box">
+            <span data-i18n="groupFilterLabel">小组</span>
+            <select id="groupFilter"></select>
+          </label>
+          <label class="select-box">
+            <span data-i18n="continentFilterLabel">大洲</span>
+            <select id="continentFilter"></select>
+          </label>
+        </div>
+        <div class="quick-filter-bar">
+          <div class="quick-filter-heading" data-i18n="popularFilterLabel">热门球队</div>
+          <div class="chip-row" id="popularTeamFilters"></div>
+        </div>
+        <div class="match-list" id="scheduleList"></div>
+      </section>
+
+      <section class="panel" id="resultsView">
+        <div class="summary-grid">
+          <div class="metric">
+            <span data-i18n="completedMatches">已完赛</span>
+            <strong id="completedCount">0</strong>
+          </div>
+          <div class="metric">
+            <span data-i18n="nextMatchLabel">下一场</span>
+            <strong id="nextMatch" data-i18n="tbd">待定</strong>
+          </div>
+          <div class="metric">
+            <span data-i18n="updatedLabel">更新时间</span>
+            <strong id="updatedAt">--</strong>
+          </div>
+        </div>
+
+        <section class="section-block">
+          <h2 data-i18n="recentResults">最近完赛</h2>
+          <div class="recent-results-grid" id="recentResultsList"></div>
+        </section>
+
+        <section class="section-block">
+          <h2 data-i18n="groupOutlook">小组出线形势</h2>
+          <p class="hint" data-i18n="qualificationHint">每组前二进入 32 强，12 个小组第三名中成绩最好的 8 队也晋级。</p>
+          <div class="group-grid" id="standingsGrid"></div>
+        </section>
+
+        <section class="section-block">
+          <h2 data-i18n="thirdPlaceRace">第三名竞争区</h2>
+          <div class="third-table-wrap">
+            <table class="standings-table" id="thirdPlaceTable"></table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <template id="emptyTemplate">
+      <div class="empty-state" data-i18n="empty">暂无符合条件的比赛。</div>
+    </template>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
