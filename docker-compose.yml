@@ -1,0 +1,23 @@
+services:
+  worldcup2026:
+    build: .
+    image: worldcup2026:latest
+    ports:
+      - "5173:5173"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 5173
+      THE_ODDS_API_KEY: ${THE_ODDS_API_KEY:?Set THE_ODDS_API_KEY before running docker compose}
+      THE_ODDS_API_SPORT_KEY: ${THE_ODDS_API_SPORT_KEY:-soccer_fifa_world_cup}
+      THE_ODDS_API_BOOKMAKERS: ${THE_ODDS_API_BOOKMAKERS:-williamhill,ladbrokes_uk,bet365}
+      ODDS_REFRESH_TIMEZONE: ${ODDS_REFRESH_TIMEZONE:-Asia/Shanghai}
+      ODDS_REFRESH_START_HOUR: ${ODDS_REFRESH_START_HOUR:-8}
+      ODDS_REFRESH_END_HOUR: ${ODDS_REFRESH_END_HOUR:-20}
+      ODDS_REFRESH_INTERVAL_MS: ${ODDS_REFRESH_INTERVAL_MS:-10800000}
+      ODDS_CACHE_FILE: /app/data/odds-cache.json
+    volumes:
+      - odds-cache:/app/data
+    restart: unless-stopped
+
+volumes:
+  odds-cache:

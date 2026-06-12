@@ -818,6 +818,49 @@ function bracketSlot(team) {
   `;
 }
 
+function positionBracketTooltip(slot) {
+  const tooltip = slot?.querySelector(".bracket-tooltip");
+  if (!tooltip) return;
+
+  const previousDisplay = tooltip.style.display;
+  const previousVisibility = tooltip.style.visibility;
+  tooltip.style.display = "grid";
+  tooltip.style.visibility = "hidden";
+
+  const gap = 8;
+  const edgeGap = 8;
+  const slotRect = slot.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  let left = slotRect.left + 8;
+  let top = slotRect.bottom + gap;
+
+  if (left + tooltipRect.width > window.innerWidth - edgeGap) {
+    left = window.innerWidth - tooltipRect.width - edgeGap;
+  }
+
+  if (top + tooltipRect.height > window.innerHeight - edgeGap) {
+    top = slotRect.top - tooltipRect.height - gap;
+  }
+
+  left = Math.max(edgeGap, left);
+  top = Math.max(edgeGap, top);
+
+  tooltip.style.setProperty("--bracket-tooltip-left", `${Math.round(left)}px`);
+  tooltip.style.setProperty("--bracket-tooltip-top", `${Math.round(top)}px`);
+  tooltip.style.display = previousDisplay;
+  tooltip.style.visibility = previousVisibility;
+}
+
+function setBracketTooltipActive(slot, active) {
+  const match = slot?.closest(".bracket-tree-match, .bracket-side-match");
+  if (!match) return;
+  match.classList.toggle("is-tooltip-active", active);
+}
+
+function activeBracketSlot() {
+  return document.querySelector(".bracket-slot.is-focused") ?? document.querySelector(".bracket-slot:hover");
+}
+
 const bracketTreeStages = ["round-of-32", "round-of-16", "quarterfinals", "semifinals", "final"];
 const bracketTreeSizes = {
   columnWidth: 232,
@@ -1383,18 +1426,59 @@ els.popularTeamFilters.addEventListener("click", (event) => {
 
 document.addEventListener("focusin", (event) => {
   const slot = event.target.closest?.(".bracket-slot");
-  if (slot) slot.classList.add("is-focused");
+  if (slot) {
+    slot.classList.add("is-focused");
+    positionBracketTooltip(slot);
+    setBracketTooltipActive(slot, true);
+  }
 });
 
 document.addEventListener("focusout", (event) => {
   const slot = event.target.closest?.(".bracket-slot");
-  if (slot) slot.classList.remove("is-focused");
+  if (slot) {
+    slot.classList.remove("is-focused");
+    setBracketTooltipActive(slot, false);
+  }
+});
+
+document.addEventListener("pointerover", (event) => {
+  const slot = event.target.closest?.(".bracket-slot");
+  if (!slot) return;
+  positionBracketTooltip(slot);
+  setBracketTooltipActive(slot, true);
+});
+
+document.addEventListener("pointerout", (event) => {
+  const slot = event.target.closest?.(".bracket-slot");
+  if (!slot || slot.contains(event.relatedTarget) || slot.classList.contains("is-focused")) return;
+  setBracketTooltipActive(slot, false);
 });
 
 document.addEventListener("click", (event) => {
-  document.querySelectorAll(".bracket-slot.is-focused").forEach((slot) => slot.classList.remove("is-focused"));
+  document.querySelectorAll(".bracket-slot.is-focused").forEach((slot) => {
+    slot.classList.remove("is-focused");
+    setBracketTooltipActive(slot, false);
+  });
   const slot = event.target.closest?.(".bracket-slot");
-  if (slot) slot.classList.add("is-focused");
+  if (slot) {
+    slot.classList.add("is-focused");
+    positionBracketTooltip(slot);
+    setBracketTooltipActive(slot, true);
+  }
+});
+
+window.addEventListener(
+  "scroll",
+  () => {
+    const slot = activeBracketSlot();
+    if (slot) positionBracketTooltip(slot);
+  },
+  true
+);
+
+window.addEventListener("resize", () => {
+  const slot = activeBracketSlot();
+  if (slot) positionBracketTooltip(slot);
 });
 
 loadData();
