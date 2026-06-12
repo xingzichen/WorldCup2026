@@ -7,6 +7,7 @@ const messages = {
     fetchFailedDetail: "无法获取最新数据",
     scheduleTab: "赛程",
     resultsTab: "赛果与出线形势",
+    bracketTab: "晋级图",
     oddsTab: "赔率",
     searchLabel: "搜索",
     searchPlaceholder: "球队、城市、球场",
@@ -28,6 +29,19 @@ const messages = {
     updatedLabel: "更新时间",
     completedResults: "已完赛结果",
     recentResults: "最近完赛",
+    bracketTitle: "淘汰赛晋级图",
+    bracketHint: "小组赛未结束时，格子显示晋级名额；鼠标悬停可查看按当前排名推演的球队。",
+    projectedTeam: "当前对应球队",
+    projectedTeams: "当前候选球队",
+    noProjection: "暂无当前推演",
+    sourceMatch: "来源比赛",
+    thirdRankLabel: "第三名总榜",
+    roundOf32: "32强赛",
+    roundOf16: "16强赛",
+    quarterfinals: "1/4决赛",
+    semifinals: "半决赛",
+    final: "决赛",
+    thirdPlaceMatch: "三四名决赛",
     oddsTitle: "每场赔率",
     oddsHint: "使用 The Odds API。北京时间 08:00-20:00 每 3 小时最多更新一次；20:00 后不更新，继续展示上次缓存。",
     oddsUnavailable: "暂无赔率",
@@ -84,6 +98,7 @@ const messages = {
     fetchFailedDetail: "Unable to fetch latest data",
     scheduleTab: "Schedule",
     resultsTab: "Results & Qualification",
+    bracketTab: "Bracket",
     oddsTab: "Odds",
     searchLabel: "Search",
     searchPlaceholder: "Team, city, venue",
@@ -105,6 +120,19 @@ const messages = {
     updatedLabel: "Updated",
     completedResults: "Completed Results",
     recentResults: "Recent Results",
+    bracketTitle: "Knockout Bracket",
+    bracketHint: "Before group play is settled, slots show qualification placeholders. Hover a slot to see the current projected team.",
+    projectedTeam: "Current projection",
+    projectedTeams: "Current candidates",
+    noProjection: "No current projection",
+    sourceMatch: "Source match",
+    thirdRankLabel: "Third-place table",
+    roundOf32: "Round of 32",
+    roundOf16: "Round of 16",
+    quarterfinals: "Quarterfinals",
+    semifinals: "Semifinals",
+    final: "Final",
+    thirdPlaceMatch: "Third-place match",
     oddsTitle: "Match Odds",
     oddsHint: "Uses The Odds API. From 08:00 to 20:00 Beijing time, the server refreshes at most once every 3 hours. After 20:00 it keeps the last cache.",
     oddsUnavailable: "Odds unavailable",
@@ -334,8 +362,10 @@ const els = {
   refreshState: document.querySelector("#refreshState"),
   scheduleView: document.querySelector("#scheduleView"),
   resultsView: document.querySelector("#resultsView"),
+  bracketView: document.querySelector("#bracketView"),
   oddsView: document.querySelector("#oddsView"),
   scheduleList: document.querySelector("#scheduleList"),
+  bracketBoard: document.querySelector("#bracketBoard"),
   oddsList: document.querySelector("#oddsList"),
   oddsCacheStatus: document.querySelector("#oddsCacheStatus"),
   recentResultsList: document.querySelector("#recentResultsList"),
@@ -408,10 +438,10 @@ function translatePlaceholderName(name) {
   if (state.lang === "en") return name;
 
   let match = String(name).match(/^Group ([A-L]) Winner$/);
-  if (match) return `${match[1]}组第一`;
+  if (match) return `${match[1]}组首名`;
 
   match = String(name).match(/^Group ([A-L]) 2nd Place$/);
-  if (match) return `${match[1]}组第二`;
+  if (match) return `${match[1]}组第二位`;
 
   match = String(name).match(/^Round of 32 (\d+) Winner$/);
   if (match) return `32强赛第${match[1]}场胜者`;
@@ -429,13 +459,19 @@ function translatePlaceholderName(name) {
   if (match) return `半决赛第${match[1]}场负者`;
 
   match = String(name).match(/^Third Place Group ([A-L/]+)$/);
-  if (match) return `${match[1]}组第三名`;
+  if (match) return `${match[1]}组第三位`;
 
   return name;
 }
 
+function isPlaceholderName(name) {
+  return /^(Group [A-L] (Winner|2nd Place)|Third Place Group|Round of 32|Round of 16|Quarterfinal|Semifinal)/.test(
+    String(name ?? "")
+  );
+}
+
 function displayTeamName(team) {
-  const source = team.shortName || team.name;
+  const source = isPlaceholderName(team.name) ? team.name : team.shortName || team.name;
   if (state.lang === "en") return source;
   return teamNamesZh[source] || teamNamesZh[team.name] || translatePlaceholderName(source);
 }
@@ -664,6 +700,302 @@ function oddsCard(match) {
       <div class="odds-markets">${markets}</div>
     </article>
   `;
+}
+
+const stageLabelKeys = {
+  "round-of-32": "roundOf32",
+  "round-of-16": "roundOf16",
+  quarterfinals: "quarterfinals",
+  semifinals: "semifinals",
+  final: "final",
+  "3rd-place-match": "thirdPlaceMatch"
+};
+
+function knockoutMatchesByStage() {
+  const byStage = new Map();
+  for (const match of state.data.matches.filter((item) => item.stage !== "group-stage")) {
+    if (!byStage.has(match.stage)) byStage.set(match.stage, []);
+    byStage.get(match.stage).push(match);
+  }
+
+  for (const matches of byStage.values()) {
+    matches.sort((a, b) => new Date(a.date) - new Date(b.date));
+  }
+
+  return byStage;
+}
+
+function groupEntry(groupLetter, rank) {
+  const group = state.data.standings.groups.find((item) => item.name === `Group ${groupLetter}`);
+  return group?.entries?.[rank - 1] ?? null;
+}
+
+function thirdPlaceEntry(groupLetter) {
+  return state.data.standings.thirdPlace.find((entry) => entry.group === `Group ${groupLetter}`);
+}
+
+function teamLine(entry, prefix = "") {
+  if (!entry?.team?.name) return "";
+  const groupText = entry.group ? `${groupLabel(entry.group)} ` : "";
+  const rankText = entry.thirdRank
+    ? `${t("thirdRankLabel")} ${entry.thirdRank}`
+    : `${t("rank")} ${entry.rank}`;
+  return `${prefix}${groupText}${displayTeamName(entry.team)} (${rankText}, ${entry.points}${t("points")})`;
+}
+
+function resolveSlotProjection(name, depth = 0) {
+  const text = String(name ?? "");
+  if (depth > 3) return [];
+
+  let match = text.match(/^Group ([A-L]) Winner$/);
+  if (match) {
+    const entry = groupEntry(match[1], 1);
+    return entry ? [teamLine(entry, `${t("projectedTeam")}: `)] : [];
+  }
+
+  match = text.match(/^Group ([A-L]) 2nd Place$/);
+  if (match) {
+    const entry = groupEntry(match[1], 2);
+    return entry ? [teamLine(entry, `${t("projectedTeam")}: `)] : [];
+  }
+
+  match = text.match(/^Third Place Group ([A-L/]+)$/);
+  if (match) {
+    const groups = match[1].split("/");
+    const lines = groups
+      .map((group) => thirdPlaceEntry(group))
+      .filter(Boolean)
+      .sort((a, b) => a.thirdRank - b.thirdRank)
+      .map((entry) => teamLine(entry));
+    return lines.length ? [`${t("projectedTeams")}:`, ...lines] : [];
+  }
+
+  match = text.match(/^Round of 32 (\d+) Winner$/);
+  if (match) return resolveSourceMatch("round-of-32", Number(match[1]), depth);
+
+  match = text.match(/^Round of 16 (\d+) Winner$/);
+  if (match) return resolveSourceMatch("round-of-16", Number(match[1]), depth);
+
+  match = text.match(/^Quarterfinal (\d+) Winner$/);
+  if (match) return resolveSourceMatch("quarterfinals", Number(match[1]), depth);
+
+  match = text.match(/^Semifinal (\d+) Winner$/);
+  if (match) return resolveSourceMatch("semifinals", Number(match[1]), depth);
+
+  match = text.match(/^Semifinal (\d+) Loser$/);
+  if (match) return resolveSourceMatch("semifinals", Number(match[1]), depth);
+
+  return [];
+}
+
+function resolveSourceMatch(stage, number, depth) {
+  const match = knockoutMatchesByStage().get(stage)?.[number - 1];
+  if (!match) return [];
+  const lines = [
+    `${t("sourceMatch")}: ${t(stageLabelKeys[stage])} ${number}`,
+    `${translatePlaceholderName(match.home.name)} vs ${translatePlaceholderName(match.away.name)}`
+  ];
+  const projected = [
+    ...resolveSlotProjection(match.home.name, depth + 1),
+    ...resolveSlotProjection(match.away.name, depth + 1)
+  ];
+  return [...lines, ...projected.slice(0, 8)];
+}
+
+function slotTooltip(name) {
+  const lines = resolveSlotProjection(name);
+  return lines.length ? lines : [t("noProjection")];
+}
+
+function bracketSlot(team) {
+  const label = displayTeamName(team);
+  const tooltipLines = slotTooltip(team.name);
+  return `
+    <div class="bracket-slot" tabindex="0">
+      <span>${escapeHtml(label)}</span>
+      <div class="bracket-tooltip">${tooltipLines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}</div>
+    </div>
+  `;
+}
+
+const bracketTreeStages = ["round-of-32", "round-of-16", "quarterfinals", "semifinals", "final"];
+const bracketTreeSizes = {
+  columnWidth: 232,
+  columnGap: 50,
+  matchHeight: 76,
+  rowGap: 26,
+  labelHeight: 34,
+  paddingBottom: 24
+};
+
+function compactDayText(date) {
+  return makeDateFormatter({
+    month: "short",
+    day: "numeric"
+  }).format(date);
+}
+
+function bracketPlaceText(match) {
+  return displayPlaceName(match.venue.city || match.venue.name || "");
+}
+
+function bracketMatchKey(stage, number) {
+  return `${stage}:${number}`;
+}
+
+function sourceRefForSlotName(name) {
+  const text = String(name ?? "");
+  let match = text.match(/^Round of 32 (\d+) Winner$/);
+  if (match) return { stage: "round-of-32", number: Number(match[1]) };
+
+  match = text.match(/^Round of 16 (\d+) Winner$/);
+  if (match) return { stage: "round-of-16", number: Number(match[1]) };
+
+  match = text.match(/^Quarterfinal (\d+) Winner$/);
+  if (match) return { stage: "quarterfinals", number: Number(match[1]) };
+
+  match = text.match(/^Semifinal (\d+) (Winner|Loser)$/);
+  if (match) return { stage: "semifinals", number: Number(match[1]) };
+
+  return null;
+}
+
+function sourceRefsForMatch(match) {
+  return [sourceRefForSlotName(match.home.name), sourceRefForSlotName(match.away.name)].filter(Boolean);
+}
+
+function buildBracketTreeLayout(byStage) {
+  const { columnWidth, columnGap, matchHeight, rowGap, labelHeight } = bracketTreeSizes;
+  const rowStep = matchHeight + rowGap;
+  const positions = new Map();
+  const matchRecords = [];
+  const connectorRecords = [];
+
+  bracketTreeStages.forEach((stage, stageIndex) => {
+    const matches = byStage.get(stage) ?? [];
+    matches.forEach((match, index) => {
+      const number = index + 1;
+      const refs = sourceRefsForMatch(match)
+        .map((ref) => ({ ref, position: positions.get(bracketMatchKey(ref.stage, ref.number)) }))
+        .filter((item) => item.position);
+      const sourceCenter = refs.length
+        ? refs.reduce((sum, item) => sum + item.position.y + matchHeight / 2, 0) / refs.length
+        : null;
+      const position = {
+        stage,
+        number,
+        match,
+        x: stageIndex * (columnWidth + columnGap),
+        y: sourceCenter === null ? labelHeight + index * rowStep * Math.max(1, 2 ** stageIndex) : sourceCenter - matchHeight / 2
+      };
+
+      positions.set(bracketMatchKey(stage, number), position);
+      matchRecords.push(position);
+      refs.forEach((item) => connectorRecords.push({ from: item.position, to: position }));
+    });
+  });
+
+  return { positions, matchRecords, connectorRecords };
+}
+
+function bracketConnectorPath(from, to) {
+  const { columnWidth, matchHeight } = bracketTreeSizes;
+  const startX = from.x + columnWidth;
+  const startY = from.y + matchHeight / 2;
+  const endX = to.x;
+  const endY = to.y + matchHeight / 2;
+  const midX = startX + (endX - startX) / 2;
+  return `M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`;
+}
+
+function bracketTreeMatch(record) {
+  const date = new Date(record.match.date);
+  const place = bracketPlaceText(record.match);
+  return `
+    <article class="bracket-tree-match" style="left: ${record.x}px; top: ${record.y}px;">
+      <div class="bracket-tree-meta">
+        <span>${escapeHtml(compactDayText(date))}</span>
+        ${place ? `<strong>${escapeHtml(place)}</strong>` : ""}
+      </div>
+      <div class="bracket-tree-box">
+        ${bracketSlot(record.match.home)}
+        ${bracketSlot(record.match.away)}
+      </div>
+    </article>
+  `;
+}
+
+function bracketSideMatch(match, mainLayout) {
+  if (!match) return "";
+  const { columnWidth, columnGap, matchHeight } = bracketTreeSizes;
+  const finalPosition = mainLayout.positions.get(bracketMatchKey("final", 1));
+  const record = {
+    match,
+    x: finalPosition ? finalPosition.x : (bracketTreeStages.length - 1) * (columnWidth + columnGap),
+    y: finalPosition ? finalPosition.y + matchHeight + 54 : bracketTreeSizes.labelHeight
+  };
+
+  return `
+    <section class="bracket-side-match" style="left: ${record.x}px; top: ${record.y}px;">
+      <h3>${escapeHtml(t("thirdPlaceMatch"))}</h3>
+      <div class="bracket-tree-meta">
+        <span>${escapeHtml(compactDayText(new Date(match.date)))}</span>
+        ${bracketPlaceText(match) ? `<strong>${escapeHtml(bracketPlaceText(match))}</strong>` : ""}
+      </div>
+      <div class="bracket-tree-box">
+        ${bracketSlot(match.home)}
+        ${bracketSlot(match.away)}
+      </div>
+    </section>
+  `;
+}
+
+function bracketTreeLabels() {
+  const { columnWidth, columnGap } = bracketTreeSizes;
+  return bracketTreeStages
+    .map((stage, index) => {
+      const x = index * (columnWidth + columnGap);
+      return `<div class="bracket-tree-label" style="left: ${x}px;">${escapeHtml(t(stageLabelKeys[stage]))}</div>`;
+    })
+    .join("");
+}
+
+function bracketConnectors(paths, width, height) {
+  if (!paths.length) return "";
+  return `
+    <svg class="bracket-connectors" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true">
+      ${paths.map((path) => `<path d="${path}" />`).join("")}
+    </svg>
+  `;
+}
+
+function bracketTree(matchLayout, byStage) {
+  const { columnWidth, columnGap, matchHeight, paddingBottom } = bracketTreeSizes;
+  const thirdPlaceMatch = byStage.get("3rd-place-match")?.[0];
+  const sideTop = thirdPlaceMatch
+    ? (matchLayout.positions.get(bracketMatchKey("final", 1))?.y ?? 0) + matchHeight + 54
+    : 0;
+  const width = bracketTreeStages.length * columnWidth + (bracketTreeStages.length - 1) * columnGap;
+  const height = Math.max(
+    ...matchLayout.matchRecords.map((record) => record.y + matchHeight),
+    thirdPlaceMatch ? sideTop + 118 : 0
+  ) + paddingBottom;
+  const paths = matchLayout.connectorRecords.map((connector) => bracketConnectorPath(connector.from, connector.to));
+
+  return `
+    <div class="bracket-tree" style="width: ${width}px; height: ${height}px;">
+      ${bracketConnectors(paths, width, height)}
+      ${bracketTreeLabels()}
+      ${matchLayout.matchRecords.map((record) => bracketTreeMatch(record)).join("")}
+      ${bracketSideMatch(thirdPlaceMatch, matchLayout)}
+    </div>
+  `;
+}
+
+function renderBracket() {
+  const byStage = knockoutMatchesByStage();
+  const layout = buildBracketTreeLayout(byStage);
+  els.bracketBoard.innerHTML = layout.matchRecords.length ? bracketTree(layout, byStage) : `<div class="empty">${escapeHtml(t("empty"))}</div>`;
 }
 
 function emptyNode() {
@@ -975,6 +1307,7 @@ function renderAll() {
   els.refreshState.textContent = `${t("updated")} ${updateText(new Date(state.data.fetchedAt))}`;
   renderSchedule();
   renderResults();
+  renderBracket();
   renderOdds();
 }
 
@@ -985,6 +1318,7 @@ function setView(view) {
   });
   els.scheduleView.classList.toggle("active", view === "schedule");
   els.resultsView.classList.toggle("active", view === "results");
+  els.bracketView.classList.toggle("active", view === "bracket");
   els.oddsView.classList.toggle("active", view === "odds");
 }
 
@@ -1045,6 +1379,22 @@ els.popularTeamFilters.addEventListener("click", (event) => {
   state.popularTeam = button.dataset.popularTeam;
   renderFilterControls();
   renderSchedule();
+});
+
+document.addEventListener("focusin", (event) => {
+  const slot = event.target.closest?.(".bracket-slot");
+  if (slot) slot.classList.add("is-focused");
+});
+
+document.addEventListener("focusout", (event) => {
+  const slot = event.target.closest?.(".bracket-slot");
+  if (slot) slot.classList.remove("is-focused");
+});
+
+document.addEventListener("click", (event) => {
+  document.querySelectorAll(".bracket-slot.is-focused").forEach((slot) => slot.classList.remove("is-focused"));
+  const slot = event.target.closest?.(".bracket-slot");
+  if (slot) slot.classList.add("is-focused");
 });
 
 loadData();

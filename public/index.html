@@ -24,6 +24,7 @@
     <nav class="tabs" aria-label="页面">
       <button class="tab active" data-view="schedule" data-i18n="scheduleTab" type="button">赛程</button>
       <button class="tab" data-view="results" data-i18n="resultsTab" type="button">赛果与出线形势</button>
+      <button class="tab" data-view="bracket" data-i18n="bracketTab" type="button">晋级图</button>
       <button class="tab" data-view="odds" data-i18n="oddsTab" type="button">赔率</button>
     </nav>
 
@@ -91,6 +92,14 @@
           <div class="third-table-wrap">
             <table class="standings-table" id="thirdPlaceTable"></table>
           </div>
+        </section>
+      </section>
+
+      <section class="panel" id="bracketView">
+        <section class="section-block bracket-section">
+          <h2 data-i18n="bracketTitle">淘汰赛晋级图</h2>
+          <p class="hint" data-i18n="bracketHint">小组赛未结束时，格子显示晋级名额；鼠标悬停可查看按当前排名推演的球队。</p>
+          <div class="bracket-board" id="bracketBoard"></div>
         </section>
       </section>
 

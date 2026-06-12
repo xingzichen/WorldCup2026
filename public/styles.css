@@ -433,6 +433,156 @@ select {
   line-height: 1.4;
 }
 
+.bracket-section {
+  margin-top: 0;
+}
+
+.bracket-board {
+  display: block;
+  overflow-x: auto;
+  padding: 4px 0 18px;
+}
+
+.bracket-tree {
+  position: relative;
+  min-width: 100%;
+}
+
+.bracket-connectors {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.bracket-connectors path {
+  fill: none;
+  stroke: #2b2f33;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.bracket-tree-label {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  width: 232px;
+  margin: 0;
+  padding: 0 2px;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bracket-tree-match,
+.bracket-side-match {
+  position: absolute;
+  z-index: 2;
+  width: 232px;
+}
+
+.bracket-tree-meta {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.bracket-tree-meta strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--accent-strong);
+  font-weight: 900;
+  text-overflow: ellipsis;
+}
+
+.bracket-tree-box {
+  border: 1px solid #a8adb3;
+  border-right-color: #c6cbd0;
+  background: #f7f8fa;
+}
+
+.bracket-side-match h3 {
+  margin: 0 0 4px;
+  color: var(--accent-strong);
+  font-size: 12px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bracket-slot {
+  position: relative;
+  display: flex;
+  min-height: 27px;
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid #a8adb3;
+  padding: 4px 6px;
+  background: #fafafa;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+  outline: none;
+}
+
+.bracket-slot:last-child {
+  border-bottom: 0;
+}
+
+.bracket-slot:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.bracket-slot span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bracket-tooltip {
+  display: none;
+  position: absolute;
+  left: 8px;
+  top: calc(100% + 8px);
+  z-index: 20;
+  width: max-content;
+  max-width: min(300px, 72vw);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  box-shadow: var(--shadow);
+  white-space: normal;
+}
+
+.bracket-slot:hover .bracket-tooltip,
+.bracket-slot:focus .bracket-tooltip,
+.bracket-slot.is-focused .bracket-tooltip {
+  display: grid;
+  gap: 4px;
+}
+
+.bracket-venue {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .odds-section {
   margin-top: 0;
 }

@@ -123,6 +123,90 @@ function pickCompetitor(competition, side) {
   };
 }
 
+// Static FIFA/Coca-Cola Men's World Ranking for the 48 teams in this schedule.
+// Source: FIFA official men's ranking page, last official update 2026-06-11.
+const FIFA_RANKINGS = {
+  Argentina: 1,
+  Spain: 2,
+  France: 3,
+  England: 4,
+  Portugal: 5,
+  Brazil: 6,
+  Morocco: 7,
+  Netherlands: 8,
+  Belgium: 9,
+  Germany: 10,
+  Croatia: 11,
+  Mexico: 13,
+  Colombia: 14,
+  Senegal: 15,
+  Uruguay: 16,
+  USA: 17,
+  Japan: 18,
+  Switzerland: 19,
+  Iran: 20,
+  "South Korea": 22,
+  Türkiye: 23,
+  Ecuador: 24,
+  Austria: 25,
+  Australia: 27,
+  Algeria: 28,
+  Egypt: 29,
+  Canada: 30,
+  Norway: 31,
+  "Ivory Coast": 33,
+  Panama: 34,
+  Sweden: 38,
+  Paraguay: 40,
+  Scotland: 41,
+  Czechia: 43,
+  Tunisia: 45,
+  "Congo DR": 46,
+  Uzbekistan: 50,
+  Qatar: 56,
+  Iraq: 57,
+  "Saudi Arabia": 60,
+  "South Africa": 61,
+  Jordan: 63,
+  "Bosnia-Herz": 64,
+  "Cape Verde": 67,
+  Ghana: 73,
+  Curaçao: 82,
+  Haiti: 83,
+  "New Zealand": 85
+};
+
+const FIFA_RANKING_ALIASES = {
+  "Bosnia and Herzegovina": "Bosnia-Herz",
+  "Bosnia-Herzegovina": "Bosnia-Herz",
+  "Cabo Verde": "Cape Verde",
+  "Côte d'Ivoire": "Ivory Coast",
+  "IR Iran": "Iran",
+  "Korea Republic": "South Korea",
+  "United States": "USA"
+};
+
+function fifaRankingName(value) {
+  return FIFA_RANKING_ALIASES[value] ?? value;
+}
+
+function fifaRankForTeam(team) {
+  const candidates = [team?.name, team?.shortName, team?.abbreviation].filter(Boolean);
+  for (const candidate of candidates) {
+    const rank = FIFA_RANKINGS[fifaRankingName(candidate)];
+    if (rank) return rank;
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function compareProjectedStandings(a, b) {
+  if (b.points !== a.points) return b.points - a.points;
+  if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+  if (a.fifaRank !== b.fifaRank) return a.fifaRank - b.fifaRank;
+  if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+  return a.team.name.localeCompare(b.team.name);
+}
+
 function formatOddsValue(value) {
   if (value === undefined || value === null || value === "") return "";
   if (typeof value === "number") {
@@ -263,15 +347,18 @@ function normalizeEvent(event) {
 
 function normalizeStandings(rawStandings) {
   const groups = (rawStandings.children ?? []).map((group) => {
-    const entries = (group.standings?.entries ?? []).map((entry, index) => {
+    const entries = (group.standings?.entries ?? []).map((entry) => {
       const stats = statMap(entry.stats);
+      const team = {
+        name: entry.team?.displayName ?? "",
+        shortName: entry.team?.shortDisplayName ?? entry.team?.displayName ?? "",
+        abbreviation: entry.team?.abbreviation ?? "",
+        logo: entry.team?.logos?.[0]?.href ?? ""
+      };
       return {
-        rank: index + 1,
+        rank: 0,
         team: {
-          name: entry.team?.displayName ?? "",
-          shortName: entry.team?.shortDisplayName ?? entry.team?.displayName ?? "",
-          abbreviation: entry.team?.abbreviation ?? "",
-          logo: entry.team?.logos?.[0]?.href ?? ""
+          ...team
         },
         note: entry.note?.description ?? "",
         played: stats.gamesPlayed?.value ?? 0,
@@ -282,9 +369,12 @@ function normalizeStandings(rawStandings) {
         goalsAgainst: stats.pointsAgainst?.value ?? 0,
         goalDifference: stats.pointDifferential?.value ?? 0,
         goalDifferenceDisplay: stats.pointDifferential?.displayValue ?? "0",
-        points: stats.points?.value ?? 0
+        points: stats.points?.value ?? 0,
+        fifaRank: fifaRankForTeam(team)
       };
-    });
+    })
+      .sort(compareProjectedStandings)
+      .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
     return {
       id: group.id,
@@ -297,10 +387,7 @@ function normalizeStandings(rawStandings) {
     .map((group) => ({ group: group.name, ...group.entries[2] }))
     .filter((entry) => entry.team?.name)
     .sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
-      if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
-      if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
-      return a.team.name.localeCompare(b.team.name);
+      return compareProjectedStandings(a, b);
     })
     .map((entry, index) => ({ ...entry, thirdRank: index + 1, currentlyAdvancing: index < 8 }));
 
