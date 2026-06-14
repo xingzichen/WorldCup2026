@@ -48,7 +48,7 @@ const ODDS_REFRESH_INTERVAL_MS = Number(process.env.ODDS_REFRESH_INTERVAL_MS || 
 const ODDS_CACHE_FILE = process.env.ODDS_CACHE_FILE || join(__dirname, "data", "odds-cache.json");
 const PLAYER_RATINGS_CACHE_FILE =
   process.env.PLAYER_RATINGS_CACHE_FILE || join(__dirname, "data", "player-ratings-cache.json");
-const PLAYER_RATING_FORMULA_VERSION = "espn-site-rating-v3";
+const PLAYER_RATING_FORMULA_VERSION = "espn-site-rating-v4";
 
 const PLAYER_RATING_FORMULA = {
   version: PLAYER_RATING_FORMULA_VERSION,
@@ -485,6 +485,105 @@ function goalEventsFromSummary(summary) {
   });
 }
 
+function eventTeamId(event) {
+  return String(event.team?.id ?? event.team?.team?.id ?? event.competitor?.id ?? "");
+}
+
+function summaryTeamSides(summary) {
+  const competitors =
+    summary.header?.competitions?.[0]?.competitors ??
+    summary.competitions?.[0]?.competitors ??
+    summary.boxscore?.teams ??
+    [];
+  const sides = new Map();
+
+  competitors.forEach((competitor, index) => {
+    const id = String(competitor.team?.id ?? competitor.id ?? "");
+    if (!id) return;
+    const side = competitor.homeAway ?? (index === 0 ? "home" : index === 1 ? "away" : "");
+    if (side === "home" || side === "away") sides.set(id, side);
+  });
+
+  return sides;
+}
+
+function buildGoalInfluence(summary) {
+  const sides = summaryTeamSides(summary);
+  const goalEvents = [...goalEventsFromSummary(summary)].sort(
+    (a, b) => Number(a.clock?.value ?? 0) - Number(b.clock?.value ?? 0)
+  );
+  const timeline = [];
+  let homeScore = 0;
+  let awayScore = 0;
+
+  for (const event of goalEvents) {
+    const side = sides.get(eventTeamId(event));
+    if (!side) continue;
+
+    const beforeHome = homeScore;
+    const beforeAway = awayScore;
+    if (side === "home") homeScore += 1;
+    if (side === "away") awayScore += 1;
+
+    const beforeOwn = side === "home" ? beforeHome : beforeAway;
+    const beforeOpp = side === "home" ? beforeAway : beforeHome;
+    const afterOwn = side === "home" ? homeScore : awayScore;
+    const afterOpp = side === "home" ? awayScore : homeScore;
+    const goAhead = beforeOwn <= beforeOpp && afterOwn > afterOpp;
+    const equalizer = beforeOwn < beforeOpp && afterOwn === afterOpp;
+
+    timeline.push({
+      event,
+      side,
+      goAhead,
+      equalizer,
+      winningGoal: false,
+      penalty: /\bpenalty\b/i.test(`${event.text ?? ""} ${event.shortText ?? ""} ${event.type?.text ?? ""}`)
+    });
+  }
+
+  const winnerSide = homeScore === awayScore ? "" : homeScore > awayScore ? "home" : "away";
+  const winningGoal = [...timeline].reverse().find((item) => item.side === winnerSide && item.goAhead);
+  if (winningGoal) winningGoal.winningGoal = true;
+
+  const influence = new Map();
+  const touch = (athleteId, patch) => {
+    if (!athleteId) return;
+    const id = String(athleteId);
+    const existing = influence.get(id) ?? {
+      points: 0,
+      goals: 0,
+      assists: 0,
+      equalizers: 0,
+      goAheadGoals: 0,
+      winningGoals: 0
+    };
+    influence.set(id, { ...existing, ...patch(existing) });
+  };
+
+  for (const item of timeline) {
+    const scorerId = item.event.participants?.[0]?.athlete?.id;
+    const assistId = item.event.participants?.[1]?.athlete?.id;
+    const baseGoalPoints = item.goAhead ? 3 : item.equalizer ? 2 : 1;
+    const goalPoints = (item.penalty ? baseGoalPoints * 0.75 : baseGoalPoints) + (item.winningGoal ? 2 : 0);
+    const assistPoints = (item.goAhead ? 2 : item.equalizer ? 1.5 : 0.8) + (item.winningGoal ? 1 : 0);
+
+    touch(scorerId, (existing) => ({
+      points: rounded(existing.points + goalPoints, 2),
+      goals: existing.goals + 1,
+      equalizers: existing.equalizers + (item.equalizer ? 1 : 0),
+      goAheadGoals: existing.goAheadGoals + (item.goAhead ? 1 : 0),
+      winningGoals: existing.winningGoals + (item.winningGoal ? 1 : 0)
+    }));
+    touch(assistId, (existing) => ({
+      points: rounded(existing.points + assistPoints, 2),
+      assists: existing.assists + 1
+    }));
+  }
+
+  return influence;
+}
+
 function matchDurationSeconds(summary, match) {
   const eventMax = Math.max(0, ...((summary.keyEvents ?? []).map((event) => Number(event.clock?.value ?? 0))));
   if (match.status?.completed) return Math.max(90 * 60, eventMax);
@@ -758,6 +857,7 @@ function normalizePlayerRatingsFromSummary(match, summary) {
   const substitutions = playerSubstitutionTimes(summary);
   const durationSeconds = matchDurationSeconds(summary, match);
   const penaltyGoals = new Map();
+  const goalInfluence = buildGoalInfluence(summary);
   const ratings = [];
 
   for (const event of goalEventsFromSummary(summary)) {
@@ -792,6 +892,14 @@ function normalizePlayerRatingsFromSummary(match, summary) {
         starter: Boolean(player.starter),
         subbedIn: Boolean(player.subbedIn),
         subbedOut: Boolean(player.subbedOut),
+        clutch: goalInfluence.get(String(player.athlete?.id ?? "")) ?? {
+          points: 0,
+          goals: 0,
+          assists: 0,
+          equalizers: 0,
+          goAheadGoals: 0,
+          winningGoals: 0
+        },
         ...matchRating
       });
     }
@@ -878,8 +986,16 @@ function mergePlayerRating(aggregates, entry, match) {
     weightedRatingTotal: 0,
     goals: 0,
     assists: 0,
+    shotsOnTarget: 0,
+    totalShots: 0,
     yellowCards: 0,
     redCards: 0,
+    clutchPoints: 0,
+    clutchGoals: 0,
+    clutchAssists: 0,
+    equalizers: 0,
+    goAheadGoals: 0,
+    winningGoals: 0,
     highMatchRating: null,
     lowMatchRating: null,
     latestMatchRating: null,
@@ -901,8 +1017,16 @@ function mergePlayerRating(aggregates, entry, match) {
     existing.weightedRatingTotal += entry.rating * minutes;
     existing.goals += entry.stats?.goals ?? 0;
     existing.assists += entry.stats?.assists ?? 0;
+    existing.shotsOnTarget += entry.stats?.shotsOnTarget ?? 0;
+    existing.totalShots += entry.stats?.totalShots ?? 0;
     existing.yellowCards += entry.stats?.yellowCards ?? 0;
     existing.redCards += entry.stats?.redCards ?? 0;
+    existing.clutchPoints = rounded(existing.clutchPoints + (entry.clutch?.points ?? 0), 2);
+    existing.clutchGoals += entry.clutch?.goals ?? 0;
+    existing.clutchAssists += entry.clutch?.assists ?? 0;
+    existing.equalizers += entry.clutch?.equalizers ?? 0;
+    existing.goAheadGoals += entry.clutch?.goAheadGoals ?? 0;
+    existing.winningGoals += entry.clutch?.winningGoals ?? 0;
     existing.highMatchRating =
       !existing.highMatchRating || entry.rating > existing.highMatchRating.rating
         ? { matchId: match.id, matchName: match.name, date: match.date, rating: entry.rating }
@@ -919,7 +1043,8 @@ function mergePlayerRating(aggregates, entry, match) {
       minutes,
       starter: entry.starter,
       stats: entry.stats,
-      components: entry.components
+      components: entry.components,
+      clutch: entry.clutch
     });
   }
 
@@ -949,7 +1074,20 @@ function buildPlayerRatingRankings(cache) {
     .map((entry) => ({
       ...entry,
       averageRating: rounded(entry.weightedRatingTotal / entry.minutes, 2),
+      goalsPer90: rounded((entry.goals * 90) / entry.minutes, 2),
+      assistsPer90: rounded((entry.assists * 90) / entry.minutes, 2),
+      shotsOnTargetPer90: rounded((entry.shotsOnTarget * 90) / entry.minutes, 2),
       matches: entry.matches.sort((a, b) => new Date(b.date) - new Date(a.date))
+    }))
+    .map((entry) => ({
+      ...entry,
+      efficiencyScore: rounded(
+        entry.averageRating +
+          entry.goalsPer90 * 0.6 +
+          entry.assistsPer90 * 0.4 +
+          entry.shotsOnTargetPer90 * 0.05,
+        2
+      )
     }));
 
   const high = [...eligiblePlayers]
@@ -978,9 +1116,41 @@ function buildPlayerRatingRankings(cache) {
     .slice(0, 50)
     .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
+  const clutch = [...eligiblePlayers]
+    .filter((entry) => entry.clutchPoints > 0)
+    .sort((a, b) => {
+      if (b.clutchPoints !== a.clutchPoints) return b.clutchPoints - a.clutchPoints;
+      if (b.winningGoals !== a.winningGoals) return b.winningGoals - a.winningGoals;
+      if (b.goAheadGoals !== a.goAheadGoals) return b.goAheadGoals - a.goAheadGoals;
+      if (b.equalizers !== a.equalizers) return b.equalizers - a.equalizers;
+      if (b.averageRating !== a.averageRating) return b.averageRating - a.averageRating;
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, 50)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+
+  const efficiency = [...eligiblePlayers]
+    .sort((a, b) => {
+      if (b.efficiencyScore !== a.efficiencyScore) return b.efficiencyScore - a.efficiencyScore;
+      if (b.averageRating !== a.averageRating) return b.averageRating - a.averageRating;
+      if (b.goalsPer90 !== a.goalsPer90) return b.goalsPer90 - a.goalsPer90;
+      if (b.assistsPer90 !== a.assistsPer90) return b.assistsPer90 - a.assistsPer90;
+      if (b.minutes !== a.minutes) return b.minutes - a.minutes;
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, 50)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+
   return {
     high,
     low,
+    clutch,
+    efficiency,
+    players: eligiblePlayers.sort((a, b) => a.name.localeCompare(b.name)),
+    clutchFormula:
+      "关键先生分：普通进球 1 分，扳平球 2 分，反超球 3 分，制胜球额外 +2；点球进球按 75% 计算；助攻按普通 0.8、扳平 1.5、反超 2 分，制胜助攻额外 +1。",
+    efficiencyFormula:
+      "效率分：平均评分 + 每90分钟进球*0.60 + 每90分钟助攻*0.40 + 每90分钟射正*0.05；仅统计累计有效出场不少于 30 分钟的中场和前锋。",
     formula: PLAYER_RATING_FORMULA,
     matchesCounted: matchSets.length,
     playersCounted: eligiblePlayers.length,
