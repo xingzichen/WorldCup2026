@@ -8,6 +8,8 @@ const messages = {
     scheduleTab: "赛程",
     resultsTab: "赛果与出线形势",
     bracketTab: "晋级图",
+    scorersTab: "射手榜",
+    assistsTab: "助攻榜",
     oddsTab: "赔率",
     searchLabel: "搜索",
     searchPlaceholder: "球队、城市、球场",
@@ -42,6 +44,21 @@ const messages = {
     semifinals: "半决赛",
     final: "决赛",
     thirdPlaceMatch: "三四名决赛",
+    scorersTitle: "射手榜",
+    scorersHint: "排序规则：进球数优先，其次助攻数，再比较较少出场时间；点球数用于辅助观察。",
+    assistsTitle: "助攻榜",
+    assistsHint: "排序规则：助攻数优先，其次进球数，再比较较少出场时间。",
+    leaderboardSource: "统计来源",
+    leaderboardSourceEspn: "ESPN 单场球员统计与关键事件",
+    matchesCounted: "已统计比赛",
+    player: "球员",
+    goals: "进球",
+    assists: "助攻",
+    penalties: "点球",
+    minutes: "出场时间",
+    approxMinutes: "约 {minutes} 分钟",
+    unknownMinutes: "暂无",
+    appearances: "出场",
     oddsTitle: "每场赔率",
     oddsHint: "使用 The Odds API。北京时间 08:00-20:00 每 3 小时最多更新一次；20:00 后不更新，继续展示上次缓存。",
     oddsUnavailable: "暂无赔率",
@@ -99,6 +116,8 @@ const messages = {
     scheduleTab: "Schedule",
     resultsTab: "Results & Qualification",
     bracketTab: "Bracket",
+    scorersTab: "Scorers",
+    assistsTab: "Assists",
     oddsTab: "Odds",
     searchLabel: "Search",
     searchPlaceholder: "Team, city, venue",
@@ -133,6 +152,21 @@ const messages = {
     semifinals: "Semifinals",
     final: "Final",
     thirdPlaceMatch: "Third-place match",
+    scorersTitle: "Top Scorers",
+    scorersHint: "Sorting: goals first, then assists, then fewer minutes played. Penalties are shown for context.",
+    assistsTitle: "Assist Leaders",
+    assistsHint: "Sorting: assists first, then goals, then fewer minutes played.",
+    leaderboardSource: "Source",
+    leaderboardSourceEspn: "ESPN event summary roster stats and key events",
+    matchesCounted: "Matches counted",
+    player: "Player",
+    goals: "Goals",
+    assists: "Assists",
+    penalties: "Pens",
+    minutes: "Minutes",
+    approxMinutes: "~{minutes} min",
+    unknownMinutes: "N/A",
+    appearances: "Apps",
     oddsTitle: "Match Odds",
     oddsHint: "Uses The Odds API. From 08:00 to 20:00 Beijing time, the server refreshes at most once every 3 hours. After 20:00 it keeps the last cache.",
     oddsUnavailable: "Odds unavailable",
@@ -363,11 +397,17 @@ const els = {
   scheduleView: document.querySelector("#scheduleView"),
   resultsView: document.querySelector("#resultsView"),
   bracketView: document.querySelector("#bracketView"),
+  scorersView: document.querySelector("#scorersView"),
+  assistsView: document.querySelector("#assistsView"),
   oddsView: document.querySelector("#oddsView"),
   scheduleList: document.querySelector("#scheduleList"),
   bracketBoard: document.querySelector("#bracketBoard"),
   oddsList: document.querySelector("#oddsList"),
   oddsCacheStatus: document.querySelector("#oddsCacheStatus"),
+  scorersTable: document.querySelector("#scorersTable"),
+  assistsTable: document.querySelector("#assistsTable"),
+  scorersMeta: document.querySelector("#scorersMeta"),
+  assistsMeta: document.querySelector("#assistsMeta"),
   recentResultsList: document.querySelector("#recentResultsList"),
   standingsGrid: document.querySelector("#standingsGrid"),
   thirdPlaceTable: document.querySelector("#thirdPlaceTable"),
@@ -384,6 +424,13 @@ const els = {
 
 function t(key) {
   return messages[state.lang][key] ?? messages.zh[key] ?? key;
+}
+
+function formatMessage(key, values = {}) {
+  return Object.entries(values).reduce(
+    (message, [name, value]) => message.replace(`{${name}}`, String(value)),
+    t(key)
+  );
 }
 
 function makeDateFormatter(options) {
@@ -1307,6 +1354,87 @@ function renderThirdPlace() {
   `;
 }
 
+function leaderboardMetaMarkup(leaderboards = {}) {
+  const details = [
+    `${t("matchesCounted")} ${leaderboards.matchesCounted ?? 0}`,
+    leaderboards.source ? `${t("leaderboardSource")} ${t("leaderboardSourceEspn")}` : ""
+  ].filter(Boolean);
+  return details.map((detail) => `<span>${escapeHtml(detail)}</span>`).join("");
+}
+
+function minutesText(entry) {
+  if (!entry.minutes) return t("unknownMinutes");
+  return formatMessage("approxMinutes", { minutes: entry.minutes });
+}
+
+function leaderboardHeader(mode) {
+  return `
+    <thead>
+      <tr>
+        <th>${t("rank")}</th>
+        <th>${t("player")}</th>
+        <th>${t("team")}</th>
+        <th>${mode === "scorers" ? t("goals") : t("assists")}</th>
+        <th>${mode === "scorers" ? t("assists") : t("goals")}</th>
+        <th>${t("penalties")}</th>
+        <th>${t("minutes")}</th>
+        <th>${t("appearances")}</th>
+      </tr>
+    </thead>
+  `;
+}
+
+function leaderboardRows(entries, mode) {
+  if (!entries.length) {
+    return `<tbody><tr><td colspan="8"><div class="empty-state compact">${escapeHtml(t("empty"))}</div></td></tr></tbody>`;
+  }
+
+  return `
+    <tbody>
+      ${entries
+        .map(
+          (entry) => `
+            <tr>
+              <td class="rank-cell">${entry.rank}</td>
+              <td>
+                <div class="player-cell">
+                  <strong>${escapeHtml(entry.name)}</strong>
+                  <span>${[entry.position, entry.jersey ? `#${entry.jersey}` : ""].filter(Boolean).join(" · ")}</span>
+                </div>
+              </td>
+              <td>
+                <div class="team-cell">
+                  ${entry.team?.logo ? `<img src="${escapeHtml(entry.team.logo)}" alt="" loading="lazy" />` : ""}
+                  <span>${escapeHtml(displayTeamName(entry.team ?? {}))}</span>
+                </div>
+              </td>
+              <td><strong>${mode === "scorers" ? entry.goals : entry.assists}</strong></td>
+              <td>${mode === "scorers" ? entry.assists : entry.goals}</td>
+              <td>${entry.penaltyGoals}</td>
+              <td>${escapeHtml(minutesText(entry))}</td>
+              <td>${entry.appearances}</td>
+            </tr>
+          `
+        )
+        .join("")}
+    </tbody>
+  `;
+}
+
+function renderLeaderboards() {
+  const leaderboards = state.data.playerLeaderboards ?? {};
+  els.scorersMeta.innerHTML = leaderboardMetaMarkup(leaderboards);
+  els.assistsMeta.innerHTML = leaderboardMetaMarkup(leaderboards);
+  els.scorersTable.innerHTML = `
+    ${leaderboardHeader("scorers")}
+    ${leaderboardRows(leaderboards.scorers ?? [], "scorers")}
+  `;
+  els.assistsTable.innerHTML = `
+    ${leaderboardHeader("assists")}
+    ${leaderboardRows(leaderboards.assists ?? [], "assists")}
+  `;
+}
+
 function renderResults() {
   const completed = state.data.matches.filter((match) => match.status.completed);
   const recentCompleted = [...completed]
@@ -1351,6 +1479,7 @@ function renderAll() {
   renderSchedule();
   renderResults();
   renderBracket();
+  renderLeaderboards();
   renderOdds();
 }
 
@@ -1362,6 +1491,8 @@ function setView(view) {
   els.scheduleView.classList.toggle("active", view === "schedule");
   els.resultsView.classList.toggle("active", view === "results");
   els.bracketView.classList.toggle("active", view === "bracket");
+  els.scorersView.classList.toggle("active", view === "scorers");
+  els.assistsView.classList.toggle("active", view === "assists");
   els.oddsView.classList.toggle("active", view === "odds");
 }
 
@@ -1385,6 +1516,8 @@ async function loadData() {
     const message = `<div class="error">${escapeHtml(t("fetchFailedDetail"))}：${escapeHtml(error.message)}</div>`;
     els.scheduleList.innerHTML = message;
     els.recentResultsList.innerHTML = message;
+    els.scorersTable.innerHTML = message;
+    els.assistsTable.innerHTML = message;
   }
 }
 

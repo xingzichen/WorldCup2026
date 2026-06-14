@@ -34,6 +34,7 @@ const SCOREBOARD_URL =
   "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719&limit=200";
 const STANDINGS_URL =
   "https://site.web.api.espn.com/apis/v2/sports/soccer/fifa.world/standings";
+const EVENT_SUMMARY_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary";
 const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY || "";
 const THE_ODDS_API_SPORT_KEY = process.env.THE_ODDS_API_SPORT_KEY || "soccer_fifa_world_cup";
 const THE_ODDS_API_BOOKMAKERS =
@@ -88,6 +89,7 @@ function persistOddsCache(cache) {
 
 let oddsApiCache = loadPersistedOddsCache();
 let oddsApiRequest = null;
+const eventSummaryCache = new Map();
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -394,6 +396,229 @@ function normalizeStandings(rawStandings) {
   return { groups, thirdPlace };
 }
 
+function numericStat(stats = [], name) {
+  const stat = stats.find((item) => item.name === name);
+  return Number(stat?.value ?? 0);
+}
+
+function teamFromSummary(summaryTeam = {}) {
+  return {
+    id: summaryTeam.id ?? "",
+    name: summaryTeam.displayName ?? "",
+    shortName: summaryTeam.shortDisplayName ?? summaryTeam.displayName ?? "",
+    abbreviation: summaryTeam.abbreviation ?? "",
+    logo: summaryTeam.logo ?? summaryTeam.logos?.[0]?.href ?? ""
+  };
+}
+
+function goalEventsFromSummary(summary) {
+  return (summary.keyEvents ?? []).filter((event) => {
+    const type = event.type?.type ?? "";
+    return Boolean(event.scoringPlay) || type.includes("goal");
+  });
+}
+
+function matchDurationSeconds(summary, match) {
+  const eventMax = Math.max(0, ...((summary.keyEvents ?? []).map((event) => Number(event.clock?.value ?? 0))));
+  if (match.status?.completed) return Math.max(90 * 60, eventMax);
+  return Math.max(eventMax, 0);
+}
+
+function playerSubstitutionTimes(summary) {
+  const substitutions = new Map();
+  for (const event of summary.keyEvents ?? []) {
+    if (event.type?.type !== "substitution") continue;
+    const seconds = Number(event.clock?.value ?? 0);
+    const subIn = event.participants?.[0]?.athlete?.id;
+    const subOut = event.participants?.[1]?.athlete?.id;
+    if (subIn) substitutions.set(subIn, { ...(substitutions.get(subIn) ?? {}), in: seconds });
+    if (subOut) substitutions.set(subOut, { ...(substitutions.get(subOut) ?? {}), out: seconds });
+  }
+  return substitutions;
+}
+
+function estimatedMinutesPlayed(player, substitutions, durationSeconds) {
+  const id = player.athlete?.id;
+  const times = substitutions.get(id) ?? {};
+  const appeared = numericStat(player.stats, "appearances") > 0 || player.starter || player.subbedIn;
+  if (!appeared) return null;
+
+  const start = player.starter ? 0 : times.in;
+  if (start === undefined) return null;
+
+  const end = player.subbedOut ? times.out : durationSeconds;
+  if (end === undefined || end < start) return null;
+
+  return Math.max(1, Math.ceil((end - start) / 60));
+}
+
+function playerKey(player, team) {
+  return player.athlete?.id || `${team.id || team.name}:${player.athlete?.displayName}`;
+}
+
+function mergePlayerStat(leaderboards, entry) {
+  const existing = leaderboards.get(entry.id) ?? {
+    ...entry,
+    goals: 0,
+    assists: 0,
+    penaltyGoals: 0,
+    ownGoals: 0,
+    appearances: 0,
+    minutes: 0,
+    minutesEstimated: false,
+    matches: []
+  };
+
+  existing.goals += entry.goals;
+  existing.assists += entry.assists;
+  existing.penaltyGoals += entry.penaltyGoals;
+  existing.ownGoals += entry.ownGoals;
+  existing.appearances += entry.appearances;
+  existing.minutes += entry.minutes ?? 0;
+  existing.minutesEstimated = existing.minutesEstimated || entry.minutesEstimated;
+  existing.matches.push(...entry.matches);
+  leaderboards.set(entry.id, existing);
+}
+
+function normalizePlayerLeaderboardsFromSummaries(summaries) {
+  const players = new Map();
+
+  for (const { match, summary } of summaries) {
+    const substitutions = playerSubstitutionTimes(summary);
+    const durationSeconds = matchDurationSeconds(summary, match);
+    const penaltyGoals = new Map();
+
+    for (const event of goalEventsFromSummary(summary)) {
+      const scorerId = event.participants?.[0]?.athlete?.id;
+      if (!scorerId) continue;
+      if (/\bpenalty\b/i.test(`${event.text ?? ""} ${event.shortText ?? ""} ${event.type?.text ?? ""}`)) {
+        penaltyGoals.set(scorerId, (penaltyGoals.get(scorerId) ?? 0) + 1);
+      }
+    }
+
+    for (const rosterTeam of summary.rosters ?? []) {
+      const team = teamFromSummary(rosterTeam.team);
+      for (const player of rosterTeam.roster ?? []) {
+        const goals = numericStat(player.stats, "totalGoals");
+        const assists = numericStat(player.stats, "goalAssists");
+        const ownGoals = numericStat(player.stats, "ownGoals");
+        const appearances = numericStat(player.stats, "appearances");
+        if (!goals && !assists) continue;
+
+        const minutes = estimatedMinutesPlayed(player, substitutions, durationSeconds);
+        mergePlayerStat(players, {
+          id: playerKey(player, team),
+          name: player.athlete?.displayName ?? player.athlete?.fullName ?? "Unknown",
+          shortName: player.athlete?.shortName ?? player.athlete?.displayName ?? "",
+          jersey: player.jersey ?? player.athlete?.jersey ?? "",
+          position: player.position?.abbreviation ?? "",
+          team,
+          goals,
+          assists,
+          penaltyGoals: penaltyGoals.get(player.athlete?.id) ?? 0,
+          ownGoals,
+          appearances,
+          minutes,
+          minutesEstimated: minutes !== null,
+          matches: [
+            {
+              id: match.id,
+              date: match.date,
+              name: match.name,
+              goals,
+              assists
+            }
+          ]
+        });
+      }
+    }
+  }
+
+  const entries = [...players.values()];
+  const minutesForSort = (entry) => (entry.minutes > 0 ? entry.minutes : Number.MAX_SAFE_INTEGER);
+  const byScorers = [...entries]
+    .filter((entry) => entry.goals > 0)
+    .sort((a, b) => {
+      if (b.goals !== a.goals) return b.goals - a.goals;
+      if (b.assists !== a.assists) return b.assists - a.assists;
+      if (minutesForSort(a) !== minutesForSort(b)) return minutesForSort(a) - minutesForSort(b);
+      if (a.penaltyGoals !== b.penaltyGoals) return a.penaltyGoals - b.penaltyGoals;
+      return a.name.localeCompare(b.name);
+    })
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+
+  const byAssists = [...entries]
+    .filter((entry) => entry.assists > 0)
+    .sort((a, b) => {
+      if (b.assists !== a.assists) return b.assists - a.assists;
+      if (b.goals !== a.goals) return b.goals - a.goals;
+      if (minutesForSort(a) !== minutesForSort(b)) return minutesForSort(a) - minutesForSort(b);
+      return a.name.localeCompare(b.name);
+    })
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+
+  return {
+    scorers: byScorers,
+    assists: byAssists,
+    source: "ESPN event summary roster stats and key events",
+    matchesCounted: summaries.length
+  };
+}
+
+async function fetchEventSummary(match) {
+  const cached = eventSummaryCache.get(match.id);
+  const ttl = match.status?.completed ? 24 * 60 * 60 * 1000 : 60 * 1000;
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  const url = new URL(EVENT_SUMMARY_URL);
+  url.searchParams.set("event", match.id);
+  const data = await fetchJson(url);
+  eventSummaryCache.set(match.id, {
+    expiresAt: Date.now() + ttl,
+    data
+  });
+  return data;
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+async function getPlayerLeaderboards(matches) {
+  const startedMatches = matches.filter((match) => match.status.state !== "pre" || match.status.completed);
+  if (!startedMatches.length) {
+    return {
+      scorers: [],
+      assists: [],
+      source: "ESPN event summary roster stats and key events",
+      matchesCounted: 0
+    };
+  }
+
+  const summaries = (
+    await mapWithConcurrency(startedMatches, 6, async (match) => {
+      try {
+        return { match, summary: await fetchEventSummary(match) };
+      } catch (error) {
+        console.warn(`Failed to fetch event summary ${match.id}: ${error.message}`);
+        return null;
+      }
+    })
+  ).filter(Boolean);
+
+  return normalizePlayerLeaderboardsFromSummaries(summaries);
+}
+
 async function fetchJson(url) {
   const response = await fetch(url, {
     headers: {
@@ -530,6 +755,7 @@ async function getWorldCupData() {
     .map(normalizeEvent)
     .map((match) => mergePreferredOdds(match, oddsIndex, oddsCache.status))
     .sort((a, b) => new Date(a.date) - new Date(b.date));
+  const playerLeaderboards = await getPlayerLeaderboards(matches);
 
   return {
     source: "ESPN public soccer APIs",
@@ -547,7 +773,8 @@ async function getWorldCupData() {
     },
     fetchedAt: new Date().toISOString(),
     matches,
-    standings: normalizeStandings(standings)
+    standings: normalizeStandings(standings),
+    playerLeaderboards
   };
 }
 

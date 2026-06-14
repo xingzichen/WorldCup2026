@@ -110,6 +110,7 @@ h2 {
 .tabs {
   display: flex;
   gap: 8px;
+  overflow-x: auto;
   padding: 14px clamp(18px, 4vw, 56px);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
@@ -119,6 +120,7 @@ h2 {
 }
 
 .tab {
+  flex: 0 0 auto;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 16px;
@@ -747,6 +749,35 @@ select {
   overflow-x: auto;
 }
 
+.leaderboard-section {
+  margin-top: 0;
+}
+
+.leaderboard-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+
+.leaderboard-meta span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.leaderboard-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
 .table-wrap {
   overflow: visible;
 }
@@ -758,6 +789,15 @@ select {
 
 .third-table-wrap .standings-table {
   min-width: 560px;
+}
+
+.leaderboard-table {
+  min-width: 760px;
+}
+
+.leaderboard-table th:nth-child(3),
+.leaderboard-table td:nth-child(3) {
+  text-align: left;
 }
 
 .standings-table th,
@@ -831,6 +871,28 @@ select {
   width: 22px;
   height: 22px;
   object-fit: contain;
+}
+
+.player-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.player-cell strong {
+  line-height: 1.25;
+}
+
+.player-cell span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.empty-state.compact {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .group-card .standings-table {
