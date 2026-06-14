@@ -81,6 +81,10 @@ const messages = {
     formulaEligibility: "入榜条件",
     formulaAggregation: "总榜算法",
     ratingDetails: "细项",
+    majorScoringItems: "主要得分项",
+    majorDeductionItems: "主要扣分项",
+    noMajorScoringItems: "暂无主要得分项",
+    noMajorDeductionItems: "暂无主要扣分项",
     latestRating: "最近评分",
     cards: "牌",
     formulaUnavailable: "暂无评分公式。",
@@ -214,6 +218,10 @@ const messages = {
     formulaEligibility: "Eligibility",
     formulaAggregation: "Ranking formula",
     ratingDetails: "Details",
+    majorScoringItems: "Main scoring items",
+    majorDeductionItems: "Main deduction items",
+    noMajorScoringItems: "No main scoring items",
+    noMajorDeductionItems: "No main deduction items",
     latestRating: "Latest",
     cards: "Cards",
     formulaUnavailable: "Formula unavailable.",
@@ -1634,6 +1642,7 @@ function renderLeaderboards() {
 const ratingComponentLabels = {
   zh: {
     goals: "进球",
+    penaltyGoals: "点球进球",
     assists: "助攻",
     shotsOnTarget: "射正",
     otherShots: "其他射门",
@@ -1647,6 +1656,7 @@ const ratingComponentLabels = {
   },
   en: {
     goals: "Goals",
+    penaltyGoals: "Penalty goals",
     assists: "Assists",
     shotsOnTarget: "Shots on target",
     otherShots: "Other shots",
@@ -1696,14 +1706,19 @@ function singleMatchRatingText(matchRating) {
   return `${matchRating.rating.toFixed?.(1) ?? matchRating.rating} · ${compactDayText(new Date(matchRating.date))}`;
 }
 
-function ratingDetailsMarkup(entry) {
+function ratingComponentsForMode(components = [], mode) {
+  const filtered = components.filter((component) => (mode === "low" ? component.points < 0 : component.points > 0));
+  return filtered.sort((a, b) => (mode === "low" ? a.points - b.points : b.points - a.points));
+}
+
+function ratingDetailsMarkup(entry, mode) {
   const matches = (entry.matches ?? []).slice(0, 4);
   if (!matches.length) return "";
   return `
     <div class="rating-details">
       ${matches
         .map((match) => {
-          const components = (match.components ?? [])
+          const components = ratingComponentsForMode(match.components ?? [], mode)
             .map(
               (component) =>
                 `${ratingComponentLabel(component.label)} ${component.value} (${component.points > 0 ? "+" : ""}${component.points})`
@@ -1711,11 +1726,14 @@ function ratingDetailsMarkup(entry) {
             .join(" · ");
           const stats = match.stats ?? {};
           const statLine = `${t("goals")} ${stats.goals ?? 0} · ${t("assists")} ${stats.assists ?? 0} · ${t("minutes")} ${match.minutes}`;
+          const componentLine =
+            components || (mode === "low" ? t("noMajorDeductionItems") : t("noMajorScoringItems"));
+          const componentHeading = mode === "low" ? t("majorDeductionItems") : t("majorScoringItems");
           return `
             <div class="rating-detail-row">
               <strong>${escapeHtml(match.rating.toFixed?.(1) ?? match.rating)}</strong>
               <span>${escapeHtml(compactDayText(new Date(match.date)))} · ${escapeHtml(match.matchName)}</span>
-              <small>${escapeHtml([statLine, components].filter(Boolean).join(" · "))}</small>
+              <small>${escapeHtml([statLine, `${componentHeading}: ${componentLine}`].filter(Boolean).join(" · "))}</small>
             </div>
           `;
         })
@@ -1769,7 +1787,7 @@ function ratingsRows(entries, mode) {
               `
             : "";
           const detailRow = state.ratingDetailsVisible
-            ? `<tr class="rating-expanded-row"><td colspan="${colSpan}">${ratingDetailsMarkup(entry)}</td></tr>`
+            ? `<tr class="rating-expanded-row"><td colspan="${colSpan}">${ratingDetailsMarkup(entry, mode)}</td></tr>`
             : "";
           return `
             <tr>
