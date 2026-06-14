@@ -46,6 +46,33 @@ const ODDS_REFRESH_START_HOUR = Number(process.env.ODDS_REFRESH_START_HOUR || 8)
 const ODDS_REFRESH_END_HOUR = Number(process.env.ODDS_REFRESH_END_HOUR || 20);
 const ODDS_REFRESH_INTERVAL_MS = Number(process.env.ODDS_REFRESH_INTERVAL_MS || 3 * 60 * 60 * 1000);
 const ODDS_CACHE_FILE = process.env.ODDS_CACHE_FILE || join(__dirname, "data", "odds-cache.json");
+const PLAYER_RATINGS_CACHE_FILE =
+  process.env.PLAYER_RATINGS_CACHE_FILE || join(__dirname, "data", "player-ratings-cache.json");
+const PLAYER_RATING_FORMULA_VERSION = "espn-site-rating-v3";
+
+const PLAYER_RATING_FORMULA = {
+  version: PLAYER_RATING_FORMULA_VERSION,
+  source: "ESPN public event summary roster stats and key events",
+  name: "本站 ESPN 数据评分",
+  range: "3.0-10.0",
+  base: 6,
+  eligibility: {
+    matchMinutes: 15,
+    rankingMinutes: 30,
+    positions: ["midfielder", "forward"],
+    description: "仅统计中场和前锋；后卫和门将不进入评分榜。单场出场少于 15 分钟不进入榜单；累计有效出场时间少于 30 分钟不进入总榜。"
+  },
+  aggregation: "按有效单场出场时间加权平均：sum(rating * minutes) / sum(minutes)。",
+  rules: [
+    "基础分 6.0。",
+    "运动战进球：中场/前锋 +1.00；点球进球 +0.60，不再按普通进球加分。",
+    "助攻 +0.70。",
+    "射正 +0.15，其他未射正射门 -0.05。",
+    "被犯规 +0.05。",
+    "犯规 -0.06，黄牌 -0.35，红牌 -1.20，乌龙球 -1.00。",
+    "最终单场分限制在 3.0 到 10.0 之间，并保留 1 位小数。"
+  ]
+};
 
 function loadPersistedOddsCache() {
   try {
@@ -90,6 +117,8 @@ function persistOddsCache(cache) {
 let oddsApiCache = loadPersistedOddsCache();
 let oddsApiRequest = null;
 const eventSummaryCache = new Map();
+let playerRatingsCache = loadPersistedPlayerRatingsCache();
+let playerRatingsRequest = null;
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -111,6 +140,44 @@ function statMap(stats = []) {
       }
     ])
   );
+}
+
+function loadPersistedPlayerRatingsCache() {
+  try {
+    const persisted = JSON.parse(readFileSync(PLAYER_RATINGS_CACHE_FILE, "utf8"));
+    return {
+      version: persisted.version === PLAYER_RATING_FORMULA_VERSION ? persisted.version : PLAYER_RATING_FORMULA_VERSION,
+      matches: persisted.version === PLAYER_RATING_FORMULA_VERSION && persisted.matches ? persisted.matches : {},
+      calculatedAt: persisted.calculatedAt ?? "",
+      errors: persisted.errors ?? {}
+    };
+  } catch {
+    return {
+      version: PLAYER_RATING_FORMULA_VERSION,
+      matches: {},
+      calculatedAt: "",
+      errors: {}
+    };
+  }
+}
+
+function persistPlayerRatingsCache(cache) {
+  try {
+    mkdirSync(dirname(PLAYER_RATINGS_CACHE_FILE), { recursive: true });
+    writeFileSync(
+      PLAYER_RATINGS_CACHE_FILE,
+      JSON.stringify(
+        {
+          ...cache,
+          persistedAt: new Date().toISOString()
+        },
+        null,
+        2
+      )
+    );
+  } catch (error) {
+    console.warn(`Failed to persist player ratings cache: ${error.message}`);
+  }
 }
 
 function pickCompetitor(competition, side) {
@@ -452,6 +519,113 @@ function estimatedMinutesPlayed(player, substitutions, durationSeconds) {
   return Math.max(1, Math.ceil((end - start) / 60));
 }
 
+function rounded(value, digits = 2) {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function positionGroup(position = "", positionName = "") {
+  const value = String(position).toUpperCase();
+  const name = String(positionName).toUpperCase();
+  const defenderAbbreviations = new Set(["D", "DF", "CD", "CB", "LB", "RB", "LWB", "RWB", "SW"]);
+
+  if (value === "G" || value === "GK" || name.includes("GOALKEEPER")) return "goalkeeper";
+  if (name.includes("DEFENDER") || name.includes("BACK")) return "defender";
+  if (defenderAbbreviations.has(value) || /^C?D[-/]/.test(value) || /^[LR]B[-/]/.test(value)) {
+    return "defender";
+  }
+  if (value.includes("M") || name.includes("MIDFIELDER") || name.includes("MIDFIELD")) return "midfielder";
+  if (value.includes("F") || value.includes("W") || name.includes("FORWARD") || name.includes("STRIKER")) {
+    return "forward";
+  }
+  return "unknown";
+}
+
+function isRatingEligiblePosition(position, positionName) {
+  return PLAYER_RATING_FORMULA.eligibility.positions.includes(positionGroup(position, positionName));
+}
+
+function goalValueForPosition(position, positionName) {
+  const group = positionGroup(position, positionName);
+  return 1;
+}
+
+function ratingComponent(label, value, weight) {
+  if (!value || !weight) return null;
+  return {
+    label,
+    value,
+    weight,
+    points: rounded(value * weight, 2)
+  };
+}
+
+function playerMatchRating(player, substitutions, durationSeconds, penaltyGoals = 0) {
+  const stats = statMap(player.stats);
+  const position = player.position?.abbreviation ?? "";
+  const positionName = player.position?.displayName ?? player.position?.name ?? "";
+  const goals = Number(stats.totalGoals?.value ?? 0);
+  const penaltyGoalCount = Math.min(goals, Math.max(0, penaltyGoals));
+  const openPlayGoals = Math.max(0, goals - penaltyGoalCount);
+  const assists = Number(stats.goalAssists?.value ?? 0);
+  const shotsOnTarget = Number(stats.shotsOnTarget?.value ?? 0);
+  const totalShots = Number(stats.totalShots?.value ?? 0);
+  const foulsSuffered = Number(stats.foulsSuffered?.value ?? 0);
+  const foulsCommitted = Number(stats.foulsCommitted?.value ?? 0);
+  const yellowCards = Number(stats.yellowCards?.value ?? 0);
+  const redCards = Number(stats.redCards?.value ?? 0);
+  const ownGoals = Number(stats.ownGoals?.value ?? 0);
+  const saves = Number(stats.saves?.value ?? 0);
+  const goalsConceded = Number(stats.goalsConceded?.value ?? 0);
+  const otherShots = Math.max(0, totalShots - shotsOnTarget);
+  const minutes = estimatedMinutesPlayed(player, substitutions, durationSeconds);
+
+  const components = [
+    ratingComponent("goals", openPlayGoals, goalValueForPosition(position, positionName)),
+    ratingComponent("penaltyGoals", penaltyGoalCount, 0.6),
+    ratingComponent("assists", assists, 0.7),
+    ratingComponent("shotsOnTarget", shotsOnTarget, 0.15),
+    ratingComponent("otherShots", otherShots, -0.05),
+    ratingComponent("foulsSuffered", foulsSuffered, 0.05),
+    ratingComponent("saves", saves, 0.2),
+    ratingComponent("goalsConceded", goalsConceded, positionGroup(position, positionName) === "goalkeeper" ? -0.25 : 0),
+    ratingComponent("foulsCommitted", foulsCommitted, -0.06),
+    ratingComponent("yellowCards", yellowCards, -0.35),
+    ratingComponent("redCards", redCards, -1.2),
+    ratingComponent("ownGoals", ownGoals, -1)
+  ].filter(Boolean);
+  const rawRating = PLAYER_RATING_FORMULA.base + components.reduce((sum, item) => sum + item.points, 0);
+  const rating = rounded(clamp(rawRating, 3, 10), 1);
+
+  return {
+    rating,
+    rawRating: rounded(rawRating, 2),
+    eligible: minutes !== null && minutes >= PLAYER_RATING_FORMULA.eligibility.matchMinutes,
+    minutes,
+    minutesEstimated: minutes !== null,
+    stats: {
+      goals,
+      openPlayGoals,
+      penaltyGoals: penaltyGoalCount,
+      assists,
+      shotsOnTarget,
+      totalShots,
+      foulsSuffered,
+      foulsCommitted,
+      yellowCards,
+      redCards,
+      ownGoals,
+      saves,
+      goalsConceded
+    },
+    components
+  };
+}
+
 function playerKey(player, team) {
   return player.athlete?.id || `${team.id || team.name}:${player.athlete?.displayName}`;
 }
@@ -563,6 +737,261 @@ function normalizePlayerLeaderboardsFromSummaries(summaries) {
     source: "ESPN event summary roster stats and key events",
     matchesCounted: summaries.length
   };
+}
+
+function completedMatchMeta(match) {
+  return {
+    id: match.id,
+    date: match.date,
+    name: match.name,
+    shortName: match.shortName,
+    home: match.home,
+    away: match.away,
+    score: {
+      home: match.home.score,
+      away: match.away.score
+    }
+  };
+}
+
+function normalizePlayerRatingsFromSummary(match, summary) {
+  const substitutions = playerSubstitutionTimes(summary);
+  const durationSeconds = matchDurationSeconds(summary, match);
+  const penaltyGoals = new Map();
+  const ratings = [];
+
+  for (const event of goalEventsFromSummary(summary)) {
+    const scorerId = event.participants?.[0]?.athlete?.id;
+    if (!scorerId) continue;
+    if (/\bpenalty\b/i.test(`${event.text ?? ""} ${event.shortText ?? ""} ${event.type?.text ?? ""}`)) {
+      penaltyGoals.set(scorerId, (penaltyGoals.get(scorerId) ?? 0) + 1);
+    }
+  }
+
+  for (const rosterTeam of summary.rosters ?? []) {
+    const team = teamFromSummary(rosterTeam.team);
+    for (const player of rosterTeam.roster ?? []) {
+      const appearances = numericStat(player.stats, "appearances");
+      const appeared = appearances > 0 || player.starter || player.subbedIn;
+      if (!appeared) continue;
+
+      const matchRating = playerMatchRating(
+        player,
+        substitutions,
+        durationSeconds,
+        penaltyGoals.get(player.athlete?.id) ?? 0
+      );
+      ratings.push({
+        id: playerKey(player, team),
+        name: player.athlete?.displayName ?? player.athlete?.fullName ?? "Unknown",
+        shortName: player.athlete?.shortName ?? player.athlete?.displayName ?? "",
+        jersey: player.jersey ?? player.athlete?.jersey ?? "",
+        position: player.position?.abbreviation ?? "",
+        positionName: player.position?.displayName ?? player.position?.name ?? "",
+        team,
+        starter: Boolean(player.starter),
+        subbedIn: Boolean(player.subbedIn),
+        subbedOut: Boolean(player.subbedOut),
+        ...matchRating
+      });
+    }
+  }
+
+  return {
+    version: PLAYER_RATING_FORMULA_VERSION,
+    match: completedMatchMeta(match),
+    ratings,
+    calculatedAt: new Date().toISOString()
+  };
+}
+
+function cacheHasPlayerRatings(match) {
+  const cached = playerRatingsCache.matches?.[match.id];
+  return cached?.version === PLAYER_RATING_FORMULA_VERSION && Array.isArray(cached.ratings);
+}
+
+async function refreshMissingPlayerRatings(matches) {
+  const completedMatches = matches.filter((match) => match.status.completed);
+  const missingMatches = completedMatches.filter((match) => !cacheHasPlayerRatings(match));
+  if (!missingMatches.length) return playerRatingsCache;
+
+  const nextCache = {
+    version: PLAYER_RATING_FORMULA_VERSION,
+    matches: { ...(playerRatingsCache.matches ?? {}) },
+    errors: { ...(playerRatingsCache.errors ?? {}) },
+    calculatedAt: new Date().toISOString()
+  };
+
+  const calculated = await mapWithConcurrency(missingMatches, 4, async (match) => {
+    try {
+      const summary = await fetchEventSummary(match);
+      return { match, ratingSet: normalizePlayerRatingsFromSummary(match, summary), error: "" };
+    } catch (error) {
+      return {
+        match,
+        ratingSet: null,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  });
+
+  for (const result of calculated) {
+    if (result.ratingSet) {
+      nextCache.matches[result.match.id] = result.ratingSet;
+      delete nextCache.errors[result.match.id];
+    } else {
+      nextCache.errors[result.match.id] = {
+        match: completedMatchMeta(result.match),
+        error: result.error,
+        failedAt: new Date().toISOString()
+      };
+      console.warn(`Failed to calculate player ratings ${result.match.id}: ${result.error}`);
+    }
+  }
+
+  playerRatingsCache = nextCache;
+  persistPlayerRatingsCache(playerRatingsCache);
+  return playerRatingsCache;
+}
+
+async function getPlayerRatingsCache(matches) {
+  if (!playerRatingsRequest) {
+    playerRatingsRequest = refreshMissingPlayerRatings(matches).finally(() => {
+      playerRatingsRequest = null;
+    });
+  }
+  return playerRatingsRequest;
+}
+
+function mergePlayerRating(aggregates, entry, match) {
+  const existing = aggregates.get(entry.id) ?? {
+    id: entry.id,
+    name: entry.name,
+    shortName: entry.shortName,
+    jersey: entry.jersey,
+    position: entry.position,
+    positionName: entry.positionName,
+    team: entry.team,
+    validAppearances: 0,
+    totalAppearances: 0,
+    minutes: 0,
+    weightedRatingTotal: 0,
+    goals: 0,
+    assists: 0,
+    yellowCards: 0,
+    redCards: 0,
+    highMatchRating: null,
+    lowMatchRating: null,
+    latestMatchRating: null,
+    matches: []
+  };
+
+  existing.totalAppearances += 1;
+  existing.latestMatchRating = {
+    matchId: match.id,
+    matchName: match.name,
+    date: match.date,
+    rating: entry.rating
+  };
+
+  if (entry.eligible) {
+    const minutes = entry.minutes ?? 0;
+    existing.validAppearances += 1;
+    existing.minutes += minutes;
+    existing.weightedRatingTotal += entry.rating * minutes;
+    existing.goals += entry.stats?.goals ?? 0;
+    existing.assists += entry.stats?.assists ?? 0;
+    existing.yellowCards += entry.stats?.yellowCards ?? 0;
+    existing.redCards += entry.stats?.redCards ?? 0;
+    existing.highMatchRating =
+      !existing.highMatchRating || entry.rating > existing.highMatchRating.rating
+        ? { matchId: match.id, matchName: match.name, date: match.date, rating: entry.rating }
+        : existing.highMatchRating;
+    existing.lowMatchRating =
+      !existing.lowMatchRating || entry.rating < existing.lowMatchRating.rating
+        ? { matchId: match.id, matchName: match.name, date: match.date, rating: entry.rating }
+        : existing.lowMatchRating;
+    existing.matches.push({
+      matchId: match.id,
+      matchName: match.name,
+      date: match.date,
+      rating: entry.rating,
+      minutes,
+      starter: entry.starter,
+      stats: entry.stats,
+      components: entry.components
+    });
+  }
+
+  aggregates.set(entry.id, existing);
+}
+
+function buildPlayerRatingRankings(cache) {
+  const aggregates = new Map();
+  const matchSets = Object.values(cache.matches ?? {}).filter(
+    (set) => set?.version === PLAYER_RATING_FORMULA_VERSION && Array.isArray(set.ratings)
+  );
+
+  for (const set of matchSets) {
+    for (const entry of set.ratings) {
+      if (!isRatingEligiblePosition(entry.position, entry.positionName)) continue;
+      mergePlayerRating(aggregates, entry, set.match);
+    }
+  }
+
+  const eligiblePlayers = [...aggregates.values()]
+    .filter(
+      (entry) =>
+        entry.validAppearances > 0 &&
+        entry.minutes >= PLAYER_RATING_FORMULA.eligibility.rankingMinutes &&
+        entry.weightedRatingTotal > 0
+    )
+    .map((entry) => ({
+      ...entry,
+      averageRating: rounded(entry.weightedRatingTotal / entry.minutes, 2),
+      matches: entry.matches.sort((a, b) => new Date(b.date) - new Date(a.date))
+    }));
+
+  const high = [...eligiblePlayers]
+    .sort((a, b) => {
+      if (b.averageRating !== a.averageRating) return b.averageRating - a.averageRating;
+      if (b.minutes !== a.minutes) return b.minutes - a.minutes;
+      if (b.validAppearances !== a.validAppearances) return b.validAppearances - a.validAppearances;
+      if (b.goals !== a.goals) return b.goals - a.goals;
+      if (b.assists !== a.assists) return b.assists - a.assists;
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, 50)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+
+  const low = [...eligiblePlayers]
+    .sort((a, b) => {
+      if (a.averageRating !== b.averageRating) return a.averageRating - b.averageRating;
+      if (b.minutes !== a.minutes) return b.minutes - a.minutes;
+      if (b.validAppearances !== a.validAppearances) return b.validAppearances - a.validAppearances;
+      if (b.redCards !== a.redCards) return b.redCards - a.redCards;
+      if (b.yellowCards !== a.yellowCards) return b.yellowCards - a.yellowCards;
+      if (a.goals !== b.goals) return a.goals - b.goals;
+      if (a.assists !== b.assists) return a.assists - b.assists;
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, 50)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+
+  return {
+    high,
+    low,
+    formula: PLAYER_RATING_FORMULA,
+    matchesCounted: matchSets.length,
+    playersCounted: eligiblePlayers.length,
+    calculatedAt: cache.calculatedAt,
+    errors: Object.values(cache.errors ?? {})
+  };
+}
+
+async function getPlayerRatingRankings(matches) {
+  const cache = await getPlayerRatingsCache(matches);
+  return buildPlayerRatingRankings(cache);
 }
 
 async function fetchEventSummary(match) {
@@ -755,7 +1184,10 @@ async function getWorldCupData() {
     .map(normalizeEvent)
     .map((match) => mergePreferredOdds(match, oddsIndex, oddsCache.status))
     .sort((a, b) => new Date(a.date) - new Date(b.date));
-  const playerLeaderboards = await getPlayerLeaderboards(matches);
+  const [playerLeaderboards, playerRatings] = await Promise.all([
+    getPlayerLeaderboards(matches),
+    getPlayerRatingRankings(matches)
+  ]);
 
   return {
     source: "ESPN public soccer APIs",
@@ -774,7 +1206,8 @@ async function getWorldCupData() {
     fetchedAt: new Date().toISOString(),
     matches,
     standings: normalizeStandings(standings),
-    playerLeaderboards
+    playerLeaderboards,
+    playerRatings
   };
 }
 
@@ -792,10 +1225,10 @@ async function serveStatic(request, response) {
 
   try {
     const body = await readFile(filePath);
-    response.writeHead(200, {
-      "content-type": contentTypes[extname(filePath)] ?? "application/octet-stream",
-      "cache-control": "no-cache"
-    });
+      response.writeHead(200, {
+        "content-type": contentTypes[extname(filePath)] ?? "application/octet-stream",
+        "cache-control": "no-store"
+      });
     response.end(body);
   } catch {
     response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });

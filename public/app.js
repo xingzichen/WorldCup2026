@@ -10,6 +10,8 @@ const messages = {
     bracketTab: "晋级图",
     scorersTab: "射手榜",
     assistsTab: "助攻榜",
+    highRatingsTab: "高分榜",
+    lowRatingsTab: "低分榜",
     oddsTab: "赔率",
     searchLabel: "搜索",
     searchPlaceholder: "球队、城市、球场",
@@ -21,6 +23,8 @@ const messages = {
     allGroups: "全部小组",
     allContinents: "全部大洲",
     allPopular: "全部热门",
+    starFilterLabel: "热门巨星",
+    allStars: "全部巨星",
     scheduled: "未开赛",
     live: "进行中",
     completed: "已完赛",
@@ -53,12 +57,33 @@ const messages = {
     matchesCounted: "已统计比赛",
     player: "球员",
     goals: "进球",
+    penaltyGoals: "点球进球",
     assists: "助攻",
     penalties: "点球",
     minutes: "出场时间",
     approxMinutes: "约 {minutes} 分钟",
     unknownMinutes: "暂无",
     appearances: "出场",
+    highRatingsTitle: "高评分球员排名",
+    lowRatingsTitle: "低评分球员排名",
+    ratingsHint: "本站评分基于 ESPN 公开单场球员统计计算，仅统计中场和前锋，非媒体官方评分。",
+    showRatingDetails: "具体数据",
+    hideRatingDetails: "隐藏具体数据",
+    siteRating: "本站评分",
+    averageRating: "平均分",
+    highMatchRating: "最高单场",
+    lowMatchRating: "最低单场",
+    validAppearances: "有效出场",
+    playersCounted: "入榜球员",
+    formulaTitle: "评分公式",
+    formulaBase: "基础分",
+    formulaRange: "分数范围",
+    formulaEligibility: "入榜条件",
+    formulaAggregation: "总榜算法",
+    ratingDetails: "细项",
+    latestRating: "最近评分",
+    cards: "牌",
+    formulaUnavailable: "暂无评分公式。",
     oddsTitle: "每场赔率",
     oddsHint: "使用 The Odds API。北京时间 08:00-20:00 每 3 小时最多更新一次；20:00 后不更新，继续展示上次缓存。",
     oddsUnavailable: "暂无赔率",
@@ -118,6 +143,8 @@ const messages = {
     bracketTab: "Bracket",
     scorersTab: "Scorers",
     assistsTab: "Assists",
+    highRatingsTab: "High Ratings",
+    lowRatingsTab: "Low Ratings",
     oddsTab: "Odds",
     searchLabel: "Search",
     searchPlaceholder: "Team, city, venue",
@@ -129,6 +156,8 @@ const messages = {
     allGroups: "All groups",
     allContinents: "All continents",
     allPopular: "All popular",
+    starFilterLabel: "Star Players",
+    allStars: "All stars",
     scheduled: "Scheduled",
     live: "Live",
     completed: "Completed",
@@ -161,12 +190,33 @@ const messages = {
     matchesCounted: "Matches counted",
     player: "Player",
     goals: "Goals",
+    penaltyGoals: "Penalty goals",
     assists: "Assists",
     penalties: "Pens",
     minutes: "Minutes",
     approxMinutes: "~{minutes} min",
     unknownMinutes: "N/A",
     appearances: "Apps",
+    highRatingsTitle: "Highest-Rated Players",
+    lowRatingsTitle: "Lowest-Rated Players",
+    ratingsHint: "Site ratings are calculated from ESPN public match player stats for midfielders and forwards only, not official media ratings.",
+    showRatingDetails: "Details",
+    hideRatingDetails: "Hide details",
+    siteRating: "Site rating",
+    averageRating: "Avg rating",
+    highMatchRating: "Best match",
+    lowMatchRating: "Worst match",
+    validAppearances: "Valid apps",
+    playersCounted: "Players counted",
+    formulaTitle: "Formula",
+    formulaBase: "Base",
+    formulaRange: "Range",
+    formulaEligibility: "Eligibility",
+    formulaAggregation: "Ranking formula",
+    ratingDetails: "Details",
+    latestRating: "Latest",
+    cards: "Cards",
+    formulaUnavailable: "Formula unavailable.",
     oddsTitle: "Match Odds",
     oddsHint: "Uses The Odds API. From 08:00 to 20:00 Beijing time, the server refreshes at most once every 3 hours. After 20:00 it keeps the last cache.",
     oddsUnavailable: "Odds unavailable",
@@ -379,6 +429,73 @@ const popularTeams = [
   "Morocco"
 ];
 
+const starPlayers = [
+  { key: "mbappe", labelZh: "姆巴佩", labelEn: "Mbappé", aliases: ["Kylian Mbappé", "Kylian Mbappe", "Mbappé", "Mbappe"] },
+  { key: "messi", labelZh: "梅西", labelEn: "Messi", aliases: ["Lionel Messi", "L. Messi", "Messi"] },
+  { key: "ronaldo", labelZh: "C罗", labelEn: "Ronaldo", aliases: ["Cristiano Ronaldo", "C. Ronaldo", "Ronaldo"] },
+  { key: "yamal", labelZh: "亚马尔", labelEn: "Yamal", aliases: ["Lamine Yamal", "Yamal"] },
+  { key: "haaland", labelZh: "哈兰德", labelEn: "Haaland", aliases: ["Erling Haaland", "E. Haaland", "Haaland"] },
+  { key: "bellingham", labelZh: "贝林厄姆", labelEn: "Bellingham", aliases: ["Jude Bellingham", "J. Bellingham", "Bellingham"] },
+  { key: "vinicius", labelZh: "维尼修斯", labelEn: "Vinícius", aliases: ["Vinícius Júnior", "Vinicius Junior", "Vinícius Jr.", "Vinicius Jr.", "Vini Jr."] },
+  { key: "rodri", labelZh: "罗德里", labelEn: "Rodri", aliases: ["Rodri", "Rodrigo Hernández", "Rodrigo Hernandez"] },
+  { key: "kane", labelZh: "凯恩", labelEn: "Kane", aliases: ["Harry Kane", "H. Kane", "Kane"] },
+  { key: "saka", labelZh: "萨卡", labelEn: "Saka", aliases: ["Bukayo Saka", "B. Saka", "Saka"] },
+  { key: "foden", labelZh: "福登", labelEn: "Foden", aliases: ["Phil Foden", "P. Foden", "Foden"] },
+  { key: "musiala", labelZh: "穆西亚拉", labelEn: "Musiala", aliases: ["Jamal Musiala", "J. Musiala", "Musiala"] },
+  { key: "wirtz", labelZh: "维尔茨", labelEn: "Wirtz", aliases: ["Florian Wirtz", "F. Wirtz", "Wirtz"] },
+  { key: "pedri", labelZh: "佩德里", labelEn: "Pedri", aliases: ["Pedri"] },
+  { key: "gavi", labelZh: "加维", labelEn: "Gavi", aliases: ["Gavi"] },
+  { key: "nico-williams", labelZh: "尼科·威廉姆斯", labelEn: "Nico Williams", aliases: ["Nico Williams", "N. Williams"] },
+  { key: "leao", labelZh: "莱奥", labelEn: "Leão", aliases: ["Rafael Leão", "Rafael Leao", "R. Leão", "R. Leao", "Leão", "Leao"] },
+  { key: "bruno-fernandes", labelZh: "B费", labelEn: "Bruno Fernandes", aliases: ["Bruno Fernandes", "B. Fernandes"] },
+  { key: "bernardo-silva", labelZh: "B席", labelEn: "Bernardo Silva", aliases: ["Bernardo Silva", "B. Silva"] },
+  { key: "de-bruyne", labelZh: "德布劳内", labelEn: "De Bruyne", aliases: ["Kevin De Bruyne", "K. De Bruyne", "De Bruyne"] },
+  { key: "lautaro", labelZh: "劳塔罗", labelEn: "Lautaro", aliases: ["Lautaro Martínez", "Lautaro Martinez", "L. Martínez", "L. Martinez"] },
+  { key: "julian-alvarez", labelZh: "阿尔瓦雷斯", labelEn: "Julián Álvarez", aliases: ["Julián Álvarez", "Julian Alvarez", "J. Álvarez", "J. Alvarez"] },
+  { key: "pulisic", labelZh: "普利西奇", labelEn: "Pulisic", aliases: ["Christian Pulisic", "C. Pulisic", "Pulisic"] },
+  { key: "son", labelZh: "孙兴慜", labelEn: "Son", aliases: ["Son Heung-Min", "Son Heung Min", "Heung-Min Son", "H. Son", "Son"] },
+  { key: "neymar", labelZh: "内马尔", labelEn: "Neymar", aliases: ["Neymar", "Neymar Jr", "Neymar Jr."] },
+  { key: "modric", labelZh: "莫德里奇", labelEn: "Modrić", aliases: ["Luka Modrić", "Luka Modric", "L. Modrić", "L. Modric", "Modrić", "Modric"] },
+  { key: "salah", labelZh: "萨拉赫", labelEn: "Salah", aliases: ["Mohamed Salah", "Mohammad Salah", "M. Salah", "Salah"] },
+  { key: "hakimi", labelZh: "阿什拉夫", labelEn: "Hakimi", aliases: ["Achraf Hakimi", "A. Hakimi", "Hakimi"] },
+  { key: "kubo", labelZh: "久保建英", labelEn: "Kubo", aliases: ["Takefusa Kubo", "T. Kubo", "Kubo"] }
+];
+
+const positionNameZh = {
+  G: "门将",
+  GK: "门将",
+  D: "后卫",
+  DF: "后卫",
+  CD: "中后卫",
+  CB: "中后卫",
+  "CD-L": "左中后卫",
+  "CD-R": "右中后卫",
+  LB: "左后卫",
+  RB: "右后卫",
+  LWB: "左翼卫",
+  RWB: "右翼卫",
+  DM: "防守型中场",
+  "DM-L": "左防守型中场",
+  "DM-R": "右防守型中场",
+  CM: "中前卫",
+  "CM-L": "左中前卫",
+  "CM-R": "右中前卫",
+  AM: "前腰",
+  "AM-L": "左前腰",
+  "AM-R": "右前腰",
+  LM: "左中场",
+  RM: "右中场",
+  LW: "左边锋",
+  RW: "右边锋",
+  LF: "左前锋",
+  RF: "右前锋",
+  "CF-L": "左中锋",
+  "CF-R": "右中锋",
+  CF: "中锋",
+  ST: "前锋",
+  F: "前锋"
+};
+
 const continentOrder = ["africa", "asia", "europe", "northAmerica", "southAmerica", "oceania"];
 
 const state = {
@@ -389,6 +506,8 @@ const state = {
   group: "all",
   continent: "all",
   popularTeam: "all",
+  starPlayer: "all",
+  ratingDetailsVisible: false,
   lang: localStorage.getItem("worldcup-lang") || "zh"
 };
 
@@ -399,6 +518,8 @@ const els = {
   bracketView: document.querySelector("#bracketView"),
   scorersView: document.querySelector("#scorersView"),
   assistsView: document.querySelector("#assistsView"),
+  highRatingsView: document.querySelector("#highRatingsView"),
+  lowRatingsView: document.querySelector("#lowRatingsView"),
   oddsView: document.querySelector("#oddsView"),
   scheduleList: document.querySelector("#scheduleList"),
   bracketBoard: document.querySelector("#bracketBoard"),
@@ -406,8 +527,19 @@ const els = {
   oddsCacheStatus: document.querySelector("#oddsCacheStatus"),
   scorersTable: document.querySelector("#scorersTable"),
   assistsTable: document.querySelector("#assistsTable"),
+  highRatingsTable: document.querySelector("#highRatingsTable"),
+  lowRatingsTable: document.querySelector("#lowRatingsTable"),
   scorersMeta: document.querySelector("#scorersMeta"),
   assistsMeta: document.querySelector("#assistsMeta"),
+  highRatingsMeta: document.querySelector("#highRatingsMeta"),
+  lowRatingsMeta: document.querySelector("#lowRatingsMeta"),
+  scorersStarFilters: document.querySelector("#scorersStarFilters"),
+  assistsStarFilters: document.querySelector("#assistsStarFilters"),
+  highRatingsStarFilters: document.querySelector("#highRatingsStarFilters"),
+  lowRatingsStarFilters: document.querySelector("#lowRatingsStarFilters"),
+  highRatingsFormula: document.querySelector("#highRatingsFormula"),
+  lowRatingsFormula: document.querySelector("#lowRatingsFormula"),
+  ratingDetailToggles: document.querySelectorAll(".rating-detail-toggle"),
   recentResultsList: document.querySelector("#recentResultsList"),
   standingsGrid: document.querySelector("#standingsGrid"),
   thirdPlaceTable: document.querySelector("#thirdPlaceTable"),
@@ -474,6 +606,38 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function normalizeSearchText(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function starLabel(star) {
+  return state.lang === "zh" ? star.labelZh : star.labelEn;
+}
+
+function selectedStar() {
+  return starPlayers.find((star) => star.key === state.starPlayer) ?? null;
+}
+
+function playerMatchesSelectedStar(entry) {
+  const star = selectedStar();
+  if (!star) return true;
+  const names = [entry.name, entry.shortName, ...(entry.aliases ?? [])].map(normalizeSearchText).filter(Boolean);
+  const aliases = star.aliases.map(normalizeSearchText);
+  return aliases.some((alias) => names.some((name) => name === alias || name.includes(alias) || alias.includes(name)));
+}
+
+function positionText(entry) {
+  const code = entry.position ?? "";
+  const zhName = positionNameZh[code] ?? "";
+  if (!code) return "";
+  if (state.lang === "en") return code;
+  return zhName ? `${code} · ${zhName}` : code;
 }
 
 function groupLabel(value) {
@@ -1362,6 +1526,35 @@ function leaderboardMetaMarkup(leaderboards = {}) {
   return details.map((detail) => `<span>${escapeHtml(detail)}</span>`).join("");
 }
 
+function starFilterMarkup() {
+  return `
+    <div class="quick-filter-heading">${escapeHtml(t("starFilterLabel"))}</div>
+    <div class="chip-row">
+      <button class="filter-chip ${state.starPlayer === "all" ? "active" : ""}" data-star-player="all" type="button">
+        ${escapeHtml(t("allStars"))}
+      </button>
+      ${starPlayers
+        .map(
+          (star) => `
+            <button class="filter-chip ${state.starPlayer === star.key ? "active" : ""}" data-star-player="${escapeHtml(star.key)}" type="button">
+              ${escapeHtml(starLabel(star))}
+            </button>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderStarFilters() {
+  const markup = starFilterMarkup();
+  [els.scorersStarFilters, els.assistsStarFilters, els.highRatingsStarFilters, els.lowRatingsStarFilters].forEach(
+    (container) => {
+      if (container) container.innerHTML = markup;
+    }
+  );
+}
+
 function minutesText(entry) {
   if (!entry.minutes) return t("unknownMinutes");
   return formatMessage("approxMinutes", { minutes: entry.minutes });
@@ -1399,7 +1592,7 @@ function leaderboardRows(entries, mode) {
               <td>
                 <div class="player-cell">
                   <strong>${escapeHtml(entry.name)}</strong>
-                  <span>${[entry.position, entry.jersey ? `#${entry.jersey}` : ""].filter(Boolean).join(" · ")}</span>
+                  <span>${[positionText(entry), entry.jersey ? `#${entry.jersey}` : ""].filter(Boolean).join(" · ")}</span>
                 </div>
               </td>
               <td>
@@ -1423,16 +1616,214 @@ function leaderboardRows(entries, mode) {
 
 function renderLeaderboards() {
   const leaderboards = state.data.playerLeaderboards ?? {};
+  const scorers = (leaderboards.scorers ?? []).filter(playerMatchesSelectedStar);
+  const assists = (leaderboards.assists ?? []).filter(playerMatchesSelectedStar);
+  renderStarFilters();
   els.scorersMeta.innerHTML = leaderboardMetaMarkup(leaderboards);
   els.assistsMeta.innerHTML = leaderboardMetaMarkup(leaderboards);
   els.scorersTable.innerHTML = `
     ${leaderboardHeader("scorers")}
-    ${leaderboardRows(leaderboards.scorers ?? [], "scorers")}
+    ${leaderboardRows(scorers, "scorers")}
   `;
   els.assistsTable.innerHTML = `
     ${leaderboardHeader("assists")}
-    ${leaderboardRows(leaderboards.assists ?? [], "assists")}
+    ${leaderboardRows(assists, "assists")}
   `;
+}
+
+const ratingComponentLabels = {
+  zh: {
+    goals: "进球",
+    assists: "助攻",
+    shotsOnTarget: "射正",
+    otherShots: "其他射门",
+    foulsSuffered: "被犯规",
+    saves: "扑救",
+    goalsConceded: "失球",
+    foulsCommitted: "犯规",
+    yellowCards: "黄牌",
+    redCards: "红牌",
+    ownGoals: "乌龙"
+  },
+  en: {
+    goals: "Goals",
+    assists: "Assists",
+    shotsOnTarget: "Shots on target",
+    otherShots: "Other shots",
+    foulsSuffered: "Fouls won",
+    saves: "Saves",
+    goalsConceded: "Goals conceded",
+    foulsCommitted: "Fouls",
+    yellowCards: "Yellow cards",
+    redCards: "Red cards",
+    ownGoals: "Own goals"
+  }
+};
+
+function ratingComponentLabel(label) {
+  return ratingComponentLabels[state.lang]?.[label] ?? ratingComponentLabels.zh[label] ?? label;
+}
+
+function ratingMetaMarkup(ratings = {}) {
+  const details = [
+    `${t("matchesCounted")} ${ratings.matchesCounted ?? 0}`,
+    `${t("playersCounted")} ${ratings.playersCounted ?? 0}`,
+    ratings.calculatedAt ? `${t("updatedLabel")} ${updateText(new Date(ratings.calculatedAt))}` : ""
+  ].filter(Boolean);
+  return details.map((detail) => `<span>${escapeHtml(detail)}</span>`).join("");
+}
+
+function ratingFormulaMarkup(formula) {
+  if (!formula) return `<div class="empty-state compact">${escapeHtml(t("formulaUnavailable"))}</div>`;
+  return `
+    <details class="formula-details" open>
+      <summary>${escapeHtml(t("formulaTitle"))}: ${escapeHtml(formula.name ?? t("siteRating"))}</summary>
+      <div class="formula-grid">
+        <div><strong>${escapeHtml(t("formulaBase"))}</strong><span>${escapeHtml(String(formula.base ?? 6))}</span></div>
+        <div><strong>${escapeHtml(t("formulaRange"))}</strong><span>${escapeHtml(formula.range ?? "3.0-10.0")}</span></div>
+        <div><strong>${escapeHtml(t("formulaEligibility"))}</strong><span>${escapeHtml(formula.eligibility?.description ?? "")}</span></div>
+        <div><strong>${escapeHtml(t("formulaAggregation"))}</strong><span>${escapeHtml(formula.aggregation ?? "")}</span></div>
+      </div>
+      <ol class="formula-rules">
+        ${(formula.rules ?? []).map((rule) => `<li>${escapeHtml(rule)}</li>`).join("")}
+      </ol>
+    </details>
+  `;
+}
+
+function singleMatchRatingText(matchRating) {
+  if (!matchRating) return "—";
+  return `${matchRating.rating.toFixed?.(1) ?? matchRating.rating} · ${compactDayText(new Date(matchRating.date))}`;
+}
+
+function ratingDetailsMarkup(entry) {
+  const matches = (entry.matches ?? []).slice(0, 4);
+  if (!matches.length) return "";
+  return `
+    <div class="rating-details">
+      ${matches
+        .map((match) => {
+          const components = (match.components ?? [])
+            .map(
+              (component) =>
+                `${ratingComponentLabel(component.label)} ${component.value} (${component.points > 0 ? "+" : ""}${component.points})`
+            )
+            .join(" · ");
+          const stats = match.stats ?? {};
+          const statLine = `${t("goals")} ${stats.goals ?? 0} · ${t("assists")} ${stats.assists ?? 0} · ${t("minutes")} ${match.minutes}`;
+          return `
+            <div class="rating-detail-row">
+              <strong>${escapeHtml(match.rating.toFixed?.(1) ?? match.rating)}</strong>
+              <span>${escapeHtml(compactDayText(new Date(match.date)))} · ${escapeHtml(match.matchName)}</span>
+              <small>${escapeHtml([statLine, components].filter(Boolean).join(" · "))}</small>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function ratingsHeader(mode) {
+  const detailColumns = state.ratingDetailsVisible
+    ? `
+        <th>${t("goals")}</th>
+        <th>${t("assists")}</th>
+        <th>${t("cards")}</th>
+        <th>${t("latestRating")}</th>
+      `
+    : "";
+  return `
+    <thead>
+      <tr>
+        <th>${t("rank")}</th>
+        <th>${t("player")}</th>
+        <th>${t("team")}</th>
+        <th>${t("averageRating")}</th>
+        <th>${t("minutes")}</th>
+        <th>${t("validAppearances")}</th>
+        <th>${mode === "high" ? t("highMatchRating") : t("lowMatchRating")}</th>
+        ${detailColumns}
+      </tr>
+    </thead>
+  `;
+}
+
+function ratingsRows(entries, mode) {
+  const colSpan = state.ratingDetailsVisible ? 11 : 7;
+  if (!entries.length) {
+    return `<tbody><tr><td colspan="${colSpan}"><div class="empty-state compact">${escapeHtml(t("empty"))}</div></td></tr></tbody>`;
+  }
+
+  return `
+    <tbody>
+      ${entries
+        .map((entry) => {
+          const matchRating = mode === "high" ? entry.highMatchRating : entry.lowMatchRating;
+          const detailColumns = state.ratingDetailsVisible
+            ? `
+                <td>${entry.goals}</td>
+                <td>${entry.assists}</td>
+                <td>${entry.yellowCards}/${entry.redCards}</td>
+                <td>${escapeHtml(singleMatchRatingText(entry.latestMatchRating))}</td>
+              `
+            : "";
+          const detailRow = state.ratingDetailsVisible
+            ? `<tr class="rating-expanded-row"><td colspan="${colSpan}">${ratingDetailsMarkup(entry)}</td></tr>`
+            : "";
+          return `
+            <tr>
+              <td class="rank-cell">${entry.rank}</td>
+              <td>
+                <div class="player-cell">
+                  <strong>${escapeHtml(entry.name)}</strong>
+                  <span>${[positionText(entry), entry.jersey ? `#${entry.jersey}` : ""].filter(Boolean).join(" · ")}</span>
+                </div>
+              </td>
+              <td>
+                <div class="team-cell">
+                  ${entry.team?.logo ? `<img src="${escapeHtml(entry.team.logo)}" alt="" loading="lazy" />` : ""}
+                  <span>${escapeHtml(displayTeamName(entry.team ?? {}))}</span>
+                </div>
+              </td>
+              <td><strong>${Number(entry.averageRating).toFixed(2)}</strong></td>
+              <td>${escapeHtml(formatMessage("approxMinutes", { minutes: entry.minutes }))}</td>
+              <td>${entry.validAppearances}</td>
+              <td>${escapeHtml(singleMatchRatingText(matchRating))}</td>
+              ${detailColumns}
+            </tr>
+            ${detailRow}
+          `;
+        })
+        .join("")}
+    </tbody>
+  `;
+}
+
+function renderRatings() {
+  const ratings = state.data.playerRatings ?? {};
+  const high = (ratings.high ?? []).filter(playerMatchesSelectedStar);
+  const low = (ratings.low ?? []).filter(playerMatchesSelectedStar);
+  const formulaMarkup = ratingFormulaMarkup(ratings.formula);
+  const metaMarkup = ratingMetaMarkup(ratings);
+  renderStarFilters();
+  els.highRatingsFormula.innerHTML = formulaMarkup;
+  els.lowRatingsFormula.innerHTML = formulaMarkup;
+  els.highRatingsMeta.innerHTML = metaMarkup;
+  els.lowRatingsMeta.innerHTML = metaMarkup;
+  els.highRatingsTable.innerHTML = `
+    ${ratingsHeader("high")}
+    ${ratingsRows(high, "high")}
+  `;
+  els.lowRatingsTable.innerHTML = `
+    ${ratingsHeader("low")}
+    ${ratingsRows(low, "low")}
+  `;
+  els.ratingDetailToggles.forEach((toggle) => {
+    toggle.checked = state.ratingDetailsVisible;
+    const label = toggle.closest(".switch-control")?.querySelector("strong");
+    if (label) label.textContent = state.ratingDetailsVisible ? t("hideRatingDetails") : t("showRatingDetails");
+  });
 }
 
 function renderResults() {
@@ -1480,6 +1871,7 @@ function renderAll() {
   renderResults();
   renderBracket();
   renderLeaderboards();
+  renderRatings();
   renderOdds();
 }
 
@@ -1493,6 +1885,8 @@ function setView(view) {
   els.bracketView.classList.toggle("active", view === "bracket");
   els.scorersView.classList.toggle("active", view === "scorers");
   els.assistsView.classList.toggle("active", view === "assists");
+  els.highRatingsView.classList.toggle("active", view === "highRatings");
+  els.lowRatingsView.classList.toggle("active", view === "lowRatings");
   els.oddsView.classList.toggle("active", view === "odds");
 }
 
@@ -1518,6 +1912,8 @@ async function loadData() {
     els.recentResultsList.innerHTML = message;
     els.scorersTable.innerHTML = message;
     els.assistsTable.innerHTML = message;
+    els.highRatingsTable.innerHTML = message;
+    els.lowRatingsTable.innerHTML = message;
   }
 }
 
@@ -1555,6 +1951,21 @@ els.popularTeamFilters.addEventListener("click", (event) => {
   state.popularTeam = button.dataset.popularTeam;
   renderFilterControls();
   renderSchedule();
+});
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest?.("[data-star-player]");
+  if (!button) return;
+  state.starPlayer = button.dataset.starPlayer;
+  renderLeaderboards();
+  renderRatings();
+});
+
+els.ratingDetailToggles.forEach((toggle) => {
+  toggle.addEventListener("change", (event) => {
+    state.ratingDetailsVisible = event.target.checked;
+    renderRatings();
+  });
 });
 
 document.addEventListener("focusin", (event) => {

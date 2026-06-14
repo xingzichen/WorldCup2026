@@ -15,9 +15,10 @@ services:
       ODDS_REFRESH_END_HOUR: ${ODDS_REFRESH_END_HOUR:-20}
       ODDS_REFRESH_INTERVAL_MS: ${ODDS_REFRESH_INTERVAL_MS:-10800000}
       ODDS_CACHE_FILE: /app/data/odds-cache.json
+      PLAYER_RATINGS_CACHE_FILE: /app/data/player-ratings-cache.json
     volumes:
-      - odds-cache:/app/data
+      - worldcup-data:/app/data
     restart: unless-stopped
 
 volumes:
-  odds-cache:
+  worldcup-data:

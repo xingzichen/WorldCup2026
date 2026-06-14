@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>2026 世界杯赛程</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=2.0.4" />
   </head>
   <body>
     <header class="topbar">
@@ -27,6 +27,8 @@
       <button class="tab" data-view="bracket" data-i18n="bracketTab" type="button">晋级图</button>
       <button class="tab" data-view="scorers" data-i18n="scorersTab" type="button">射手榜</button>
       <button class="tab" data-view="assists" data-i18n="assistsTab" type="button">助攻榜</button>
+      <button class="tab" data-view="highRatings" data-i18n="highRatingsTab" type="button">高分榜</button>
+      <button class="tab" data-view="lowRatings" data-i18n="lowRatingsTab" type="button">低分榜</button>
       <button class="tab" data-view="odds" data-i18n="oddsTab" type="button">赔率</button>
     </nav>
 
@@ -118,6 +120,7 @@
         <section class="section-block leaderboard-section">
           <h2 data-i18n="scorersTitle">射手榜</h2>
           <p class="hint" data-i18n="scorersHint">按进球数、助攻数、较少出场时间排序；点球数用于辅助观察。</p>
+          <div class="leaderboard-star-filter" id="scorersStarFilters"></div>
           <div class="leaderboard-meta" id="scorersMeta"></div>
           <div class="leaderboard-table-wrap">
             <table class="standings-table leaderboard-table" id="scorersTable"></table>
@@ -129,9 +132,54 @@
         <section class="section-block leaderboard-section">
           <h2 data-i18n="assistsTitle">助攻榜</h2>
           <p class="hint" data-i18n="assistsHint">按助攻数、进球数、较少出场时间排序。</p>
+          <div class="leaderboard-star-filter" id="assistsStarFilters"></div>
           <div class="leaderboard-meta" id="assistsMeta"></div>
           <div class="leaderboard-table-wrap">
             <table class="standings-table leaderboard-table" id="assistsTable"></table>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel" id="highRatingsView">
+        <section class="section-block leaderboard-section">
+          <div class="section-title-row">
+            <div>
+              <h2 data-i18n="highRatingsTitle">高评分球员排名</h2>
+              <p class="hint" data-i18n="ratingsHint">本站评分基于 ESPN 公开单场球员统计计算，仅统计中场和前锋，非媒体官方评分。</p>
+            </div>
+            <label class="switch-control">
+              <input class="rating-detail-toggle" type="checkbox" />
+              <span></span>
+              <strong data-i18n="showRatingDetails">具体数据</strong>
+            </label>
+          </div>
+          <div class="rating-formula" id="highRatingsFormula"></div>
+          <div class="leaderboard-star-filter" id="highRatingsStarFilters"></div>
+          <div class="leaderboard-meta" id="highRatingsMeta"></div>
+          <div class="leaderboard-table-wrap">
+            <table class="standings-table leaderboard-table ratings-table" id="highRatingsTable"></table>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel" id="lowRatingsView">
+        <section class="section-block leaderboard-section">
+          <div class="section-title-row">
+            <div>
+              <h2 data-i18n="lowRatingsTitle">低评分球员排名</h2>
+              <p class="hint" data-i18n="ratingsHint">本站评分基于 ESPN 公开单场球员统计计算，仅统计中场和前锋，非媒体官方评分。</p>
+            </div>
+            <label class="switch-control">
+              <input class="rating-detail-toggle" type="checkbox" />
+              <span></span>
+              <strong data-i18n="showRatingDetails">具体数据</strong>
+            </label>
+          </div>
+          <div class="rating-formula" id="lowRatingsFormula"></div>
+          <div class="leaderboard-star-filter" id="lowRatingsStarFilters"></div>
+          <div class="leaderboard-meta" id="lowRatingsMeta"></div>
+          <div class="leaderboard-table-wrap">
+            <table class="standings-table leaderboard-table ratings-table" id="lowRatingsTable"></table>
           </div>
         </section>
       </section>
@@ -141,6 +189,6 @@
       <div class="empty-state" data-i18n="empty">暂无符合条件的比赛。</div>
     </template>
 
-    <script src="/app.js" type="module"></script>
+    <script src="/app.js?v=2.0.4" type="module"></script>
   </body>
 </html>

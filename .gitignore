@@ -1,6 +1,6 @@
 .env
 .env.*
 !.env.example
-data/odds-cache.json
+data/*.json
 ._*
 public/._*
