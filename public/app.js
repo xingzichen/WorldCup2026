@@ -10,6 +10,8 @@ const messages = {
     bracketTab: "晋级图",
     scorersTab: "射手榜",
     assistsTab: "助攻榜",
+    clutchTab: "关键先生榜",
+    efficiencyTab: "效率榜",
     highRatingsTab: "高分榜",
     lowRatingsTab: "低分榜",
     oddsTab: "赔率",
@@ -52,6 +54,10 @@ const messages = {
     scorersHint: "排序规则：进球数优先，其次助攻数，再比较较少出场时间；点球数用于辅助观察。",
     assistsTitle: "助攻榜",
     assistsHint: "排序规则：助攻数优先，其次进球数，再比较较少出场时间。",
+    clutchTitle: "关键先生榜",
+    clutchHint: "统计扳平、反超、制胜球及相关助攻贡献，仅统计中场和前锋。",
+    efficiencyTitle: "球员效率榜",
+    efficiencyHint: "按平均评分、每 90 分钟进球、助攻和射正综合排序，仅统计中场和前锋。",
     leaderboardSource: "统计来源",
     leaderboardSourceEspn: "ESPN 单场球员统计与关键事件",
     matchesCounted: "已统计比赛",
@@ -87,6 +93,20 @@ const messages = {
     noMajorDeductionItems: "暂无主要扣分项",
     latestRating: "最近评分",
     cards: "牌",
+    clutchScore: "关键分",
+    efficiencyScore: "效率分",
+    winningGoals: "制胜球",
+    goAheadGoals: "反超球",
+    equalizers: "扳平球",
+    goalsPer90: "每90分钟进球",
+    assistsPer90: "每90分钟助攻",
+    shotsOnTargetPer90: "每90分钟射正",
+    shots: "射门",
+    shotsOnTarget: "射正",
+    playerDetails: "球员详情",
+    ratingTrend: "评分趋势",
+    matchBreakdown: "单场明细",
+    noPlayerDetails: "暂无该球员的单场评分明细。",
     formulaUnavailable: "暂无评分公式。",
     oddsTitle: "每场赔率",
     oddsHint: "使用 The Odds API。北京时间 08:00-20:00 每 3 小时最多更新一次；20:00 后不更新，继续展示上次缓存。",
@@ -147,6 +167,8 @@ const messages = {
     bracketTab: "Bracket",
     scorersTab: "Scorers",
     assistsTab: "Assists",
+    clutchTab: "Clutch",
+    efficiencyTab: "Efficiency",
     highRatingsTab: "High Ratings",
     lowRatingsTab: "Low Ratings",
     oddsTab: "Odds",
@@ -189,6 +211,10 @@ const messages = {
     scorersHint: "Sorting: goals first, then assists, then fewer minutes played. Penalties are shown for context.",
     assistsTitle: "Assist Leaders",
     assistsHint: "Sorting: assists first, then goals, then fewer minutes played.",
+    clutchTitle: "Clutch Leaders",
+    clutchHint: "Tracks equalizers, go-ahead goals, winners, and related assists for midfielders and forwards.",
+    efficiencyTitle: "Player Efficiency",
+    efficiencyHint: "Ranks midfielders and forwards by average rating plus per-90 goals, assists, and shots on target.",
     leaderboardSource: "Source",
     leaderboardSourceEspn: "ESPN event summary roster stats and key events",
     matchesCounted: "Matches counted",
@@ -224,6 +250,20 @@ const messages = {
     noMajorDeductionItems: "No main deduction items",
     latestRating: "Latest",
     cards: "Cards",
+    clutchScore: "Clutch score",
+    efficiencyScore: "Efficiency",
+    winningGoals: "Winners",
+    goAheadGoals: "Go-ahead",
+    equalizers: "Equalizers",
+    goalsPer90: "Goals/90",
+    assistsPer90: "Assists/90",
+    shotsOnTargetPer90: "SOT/90",
+    shots: "Shots",
+    shotsOnTarget: "Shots on target",
+    playerDetails: "Player details",
+    ratingTrend: "Rating trend",
+    matchBreakdown: "Match log",
+    noPlayerDetails: "No match rating detail for this player yet.",
     formulaUnavailable: "Formula unavailable.",
     oddsTitle: "Match Odds",
     oddsHint: "Uses The Odds API. From 08:00 to 20:00 Beijing time, the server refreshes at most once every 3 hours. After 20:00 it keeps the last cache.",
@@ -526,6 +566,8 @@ const els = {
   bracketView: document.querySelector("#bracketView"),
   scorersView: document.querySelector("#scorersView"),
   assistsView: document.querySelector("#assistsView"),
+  clutchView: document.querySelector("#clutchView"),
+  efficiencyView: document.querySelector("#efficiencyView"),
   highRatingsView: document.querySelector("#highRatingsView"),
   lowRatingsView: document.querySelector("#lowRatingsView"),
   oddsView: document.querySelector("#oddsView"),
@@ -535,16 +577,24 @@ const els = {
   oddsCacheStatus: document.querySelector("#oddsCacheStatus"),
   scorersTable: document.querySelector("#scorersTable"),
   assistsTable: document.querySelector("#assistsTable"),
+  clutchTable: document.querySelector("#clutchTable"),
+  efficiencyTable: document.querySelector("#efficiencyTable"),
   highRatingsTable: document.querySelector("#highRatingsTable"),
   lowRatingsTable: document.querySelector("#lowRatingsTable"),
   scorersMeta: document.querySelector("#scorersMeta"),
   assistsMeta: document.querySelector("#assistsMeta"),
+  clutchMeta: document.querySelector("#clutchMeta"),
+  efficiencyMeta: document.querySelector("#efficiencyMeta"),
   highRatingsMeta: document.querySelector("#highRatingsMeta"),
   lowRatingsMeta: document.querySelector("#lowRatingsMeta"),
   scorersStarFilters: document.querySelector("#scorersStarFilters"),
   assistsStarFilters: document.querySelector("#assistsStarFilters"),
+  clutchStarFilters: document.querySelector("#clutchStarFilters"),
+  efficiencyStarFilters: document.querySelector("#efficiencyStarFilters"),
   highRatingsStarFilters: document.querySelector("#highRatingsStarFilters"),
   lowRatingsStarFilters: document.querySelector("#lowRatingsStarFilters"),
+  clutchFormula: document.querySelector("#clutchFormula"),
+  efficiencyFormula: document.querySelector("#efficiencyFormula"),
   highRatingsFormula: document.querySelector("#highRatingsFormula"),
   lowRatingsFormula: document.querySelector("#lowRatingsFormula"),
   ratingDetailToggles: document.querySelectorAll(".rating-detail-toggle"),
@@ -559,7 +609,9 @@ const els = {
   completedCount: document.querySelector("#completedCount"),
   nextMatch: document.querySelector("#nextMatch"),
   updatedAt: document.querySelector("#updatedAt"),
-  emptyTemplate: document.querySelector("#emptyTemplate")
+  emptyTemplate: document.querySelector("#emptyTemplate"),
+  playerModal: document.querySelector("#playerModal"),
+  playerModalContent: document.querySelector("#playerModalContent")
 };
 
 function t(key) {
@@ -616,6 +668,10 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function normalizeSearchText(value) {
   return String(value ?? "")
     .normalize("NFD")
@@ -646,6 +702,14 @@ function positionText(entry) {
   if (!code) return "";
   if (state.lang === "en") return code;
   return zhName ? `${code} · ${zhName}` : code;
+}
+
+function playerNameButton(entry) {
+  return `
+    <button class="player-name-button" data-player-id="${escapeHtml(entry.id)}" type="button">
+      ${escapeHtml(entry.name)}
+    </button>
+  `;
 }
 
 function groupLabel(value) {
@@ -1556,11 +1620,16 @@ function starFilterMarkup() {
 
 function renderStarFilters() {
   const markup = starFilterMarkup();
-  [els.scorersStarFilters, els.assistsStarFilters, els.highRatingsStarFilters, els.lowRatingsStarFilters].forEach(
-    (container) => {
-      if (container) container.innerHTML = markup;
-    }
-  );
+  [
+    els.scorersStarFilters,
+    els.assistsStarFilters,
+    els.clutchStarFilters,
+    els.efficiencyStarFilters,
+    els.highRatingsStarFilters,
+    els.lowRatingsStarFilters
+  ].forEach((container) => {
+    if (container) container.innerHTML = markup;
+  });
 }
 
 function minutesText(entry) {
@@ -1599,7 +1668,7 @@ function leaderboardRows(entries, mode) {
               <td class="rank-cell">${entry.rank}</td>
               <td>
                 <div class="player-cell">
-                  <strong>${escapeHtml(entry.name)}</strong>
+                  <strong>${playerNameButton(entry)}</strong>
                   <span>${[positionText(entry), entry.jersey ? `#${entry.jersey}` : ""].filter(Boolean).join(" · ")}</span>
                 </div>
               </td>
@@ -1701,6 +1770,11 @@ function ratingFormulaMarkup(formula) {
   `;
 }
 
+function rankingRuleMarkup(text) {
+  if (!text) return "";
+  return `<div class="ranking-rule">${escapeHtml(text)}</div>`;
+}
+
 function singleMatchRatingText(matchRating) {
   if (!matchRating) return "—";
   return `${matchRating.rating.toFixed?.(1) ?? matchRating.rating} · ${compactDayText(new Date(matchRating.date))}`;
@@ -1794,7 +1868,7 @@ function ratingsRows(entries, mode) {
               <td class="rank-cell">${entry.rank}</td>
               <td>
                 <div class="player-cell">
-                  <strong>${escapeHtml(entry.name)}</strong>
+                  <strong>${playerNameButton(entry)}</strong>
                   <span>${[positionText(entry), entry.jersey ? `#${entry.jersey}` : ""].filter(Boolean).join(" · ")}</span>
                 </div>
               </td>
@@ -1818,17 +1892,312 @@ function ratingsRows(entries, mode) {
   `;
 }
 
+function clutchHeader() {
+  return `
+    <thead>
+      <tr>
+        <th>${t("rank")}</th>
+        <th>${t("player")}</th>
+        <th>${t("team")}</th>
+        <th>${t("clutchScore")}</th>
+        <th>${t("winningGoals")}</th>
+        <th>${t("goAheadGoals")}</th>
+        <th>${t("equalizers")}</th>
+        <th>${t("goals")}</th>
+        <th>${t("assists")}</th>
+        <th>${t("averageRating")}</th>
+      </tr>
+    </thead>
+  `;
+}
+
+function efficiencyHeader() {
+  return `
+    <thead>
+      <tr>
+        <th>${t("rank")}</th>
+        <th>${t("player")}</th>
+        <th>${t("team")}</th>
+        <th>${t("efficiencyScore")}</th>
+        <th>${t("averageRating")}</th>
+        <th>${t("minutes")}</th>
+        <th>${t("goalsPer90")}</th>
+        <th>${t("assistsPer90")}</th>
+        <th>${t("shotsOnTargetPer90")}</th>
+        <th>${t("goals")}</th>
+        <th>${t("assists")}</th>
+      </tr>
+    </thead>
+  `;
+}
+
+function advancedPlayerCell(entry) {
+  return `
+    <td>
+      <div class="player-cell">
+        <strong>${playerNameButton(entry)}</strong>
+        <span>${[positionText(entry), entry.jersey ? `#${entry.jersey}` : ""].filter(Boolean).join(" · ")}</span>
+      </div>
+    </td>
+    <td>
+      <div class="team-cell">
+        ${entry.team?.logo ? `<img src="${escapeHtml(entry.team.logo)}" alt="" loading="lazy" />` : ""}
+        <span>${escapeHtml(displayTeamName(entry.team ?? {}))}</span>
+      </div>
+    </td>
+  `;
+}
+
+function clutchRows(entries) {
+  if (!entries.length) {
+    return `<tbody><tr><td colspan="10"><div class="empty-state compact">${escapeHtml(t("empty"))}</div></td></tr></tbody>`;
+  }
+
+  return `
+    <tbody>
+      ${entries
+        .map(
+          (entry) => `
+            <tr>
+              <td class="rank-cell">${entry.rank}</td>
+              ${advancedPlayerCell(entry)}
+              <td><strong>${Number(entry.clutchPoints ?? 0).toFixed(2)}</strong></td>
+              <td>${entry.winningGoals ?? 0}</td>
+              <td>${entry.goAheadGoals ?? 0}</td>
+              <td>${entry.equalizers ?? 0}</td>
+              <td>${entry.clutchGoals ?? 0}</td>
+              <td>${entry.clutchAssists ?? 0}</td>
+              <td>${Number(entry.averageRating ?? 0).toFixed(2)}</td>
+            </tr>
+          `
+        )
+        .join("")}
+    </tbody>
+  `;
+}
+
+function efficiencyRows(entries) {
+  if (!entries.length) {
+    return `<tbody><tr><td colspan="11"><div class="empty-state compact">${escapeHtml(t("empty"))}</div></td></tr></tbody>`;
+  }
+
+  return `
+    <tbody>
+      ${entries
+        .map(
+          (entry) => `
+            <tr>
+              <td class="rank-cell">${entry.rank}</td>
+              ${advancedPlayerCell(entry)}
+              <td><strong>${Number(entry.efficiencyScore ?? 0).toFixed(2)}</strong></td>
+              <td>${Number(entry.averageRating ?? 0).toFixed(2)}</td>
+              <td>${escapeHtml(formatMessage("approxMinutes", { minutes: entry.minutes ?? 0 }))}</td>
+              <td>${Number(entry.goalsPer90 ?? 0).toFixed(2)}</td>
+              <td>${Number(entry.assistsPer90 ?? 0).toFixed(2)}</td>
+              <td>${Number(entry.shotsOnTargetPer90 ?? 0).toFixed(2)}</td>
+              <td>${entry.goals ?? 0}</td>
+              <td>${entry.assists ?? 0}</td>
+            </tr>
+          `
+        )
+        .join("")}
+    </tbody>
+  `;
+}
+
+function playerProfileIndex() {
+  const ratings = state.data?.playerRatings ?? {};
+  const leaderboards = state.data?.playerLeaderboards ?? {};
+  const index = new Map();
+  const add = (entry) => {
+    if (!entry?.id) return;
+    const existing = index.get(entry.id) ?? {};
+    const entryMatches = Array.isArray(entry.matches) ? entry.matches : [];
+    const existingMatches = Array.isArray(existing.matches) ? existing.matches : [];
+    const hasRatingMatches = entryMatches.some((match) => match.rating !== undefined);
+    index.set(entry.id, {
+      ...existing,
+      ...entry,
+      matches: hasRatingMatches || !existingMatches.length ? entryMatches : existingMatches
+    });
+  };
+
+  [
+    ...(ratings.players ?? []),
+    ...(ratings.high ?? []),
+    ...(ratings.low ?? []),
+    ...(ratings.clutch ?? []),
+    ...(ratings.efficiency ?? []),
+    ...(leaderboards.scorers ?? []),
+    ...(leaderboards.assists ?? [])
+  ].forEach(add);
+
+  return index;
+}
+
+function formatSignedPoints(value) {
+  const number = Number(value ?? 0);
+  return `${number > 0 ? "+" : ""}${number.toFixed(2).replace(/\.00$/, "")}`;
+}
+
+function componentsText(components = []) {
+  const sorted = [...components]
+    .filter((component) => component.points)
+    .sort((a, b) => Math.abs(b.points) - Math.abs(a.points))
+    .slice(0, 6);
+  if (!sorted.length) return "—";
+  return sorted
+    .map(
+      (component) =>
+        `${ratingComponentLabel(component.label)} ${component.value} (${formatSignedPoints(component.points)})`
+    )
+    .join(" · ");
+}
+
+function playerSummaryMetrics(profile) {
+  const shots = profile.totalShots ?? profile.matches?.reduce((sum, match) => sum + (match.stats?.totalShots ?? 0), 0) ?? 0;
+  const shotsOnTarget =
+    profile.shotsOnTarget ?? profile.matches?.reduce((sum, match) => sum + (match.stats?.shotsOnTarget ?? 0), 0) ?? 0;
+  return [
+    [t("averageRating"), profile.averageRating ? Number(profile.averageRating).toFixed(2) : "—"],
+    [t("minutes"), profile.minutes ? formatMessage("approxMinutes", { minutes: profile.minutes }) : t("unknownMinutes")],
+    [t("goals"), profile.goals ?? 0],
+    [t("assists"), profile.assists ?? 0],
+    [t("shots"), `${shotsOnTarget}/${shots}`],
+    [t("cards"), `${profile.yellowCards ?? 0}/${profile.redCards ?? 0}`],
+    [t("clutchScore"), profile.clutchPoints ? Number(profile.clutchPoints).toFixed(2) : "—"],
+    [t("efficiencyScore"), profile.efficiencyScore ? Number(profile.efficiencyScore).toFixed(2) : "—"]
+  ];
+}
+
+function ratingTrendMarkup(matches = []) {
+  const ratedMatches = [...matches].filter((match) => match.rating !== undefined).reverse();
+  if (!ratedMatches.length) return `<div class="empty-state compact">${escapeHtml(t("noPlayerDetails"))}</div>`;
+
+  return `
+    <div class="rating-trend" aria-label="${escapeHtml(t("ratingTrend"))}">
+      ${ratedMatches
+        .map((match) => {
+          const height = clamp(((Number(match.rating) - 3) / 7) * 100, 8, 100);
+          return `
+            <div class="rating-trend-item">
+              <div class="rating-trend-bar" style="--rating-height:${height}%"><span></span></div>
+              <strong>${Number(match.rating).toFixed(1)}</strong>
+              <small>${escapeHtml(compactDayText(new Date(match.date)))}</small>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function playerMatchRows(matches = []) {
+  const ratedMatches = matches.filter((match) => match.rating !== undefined);
+  if (!ratedMatches.length) return `<div class="empty-state compact">${escapeHtml(t("noPlayerDetails"))}</div>`;
+
+  return ratedMatches
+    .map((match) => {
+      const stats = match.stats ?? {};
+      const clutch = match.clutch ?? {};
+      const statLine = [
+        `${t("goals")} ${stats.goals ?? 0}`,
+        `${t("assists")} ${stats.assists ?? 0}`,
+        `${t("shots")} ${stats.shotsOnTarget ?? 0}/${stats.totalShots ?? 0}`,
+        `${t("cards")} ${stats.yellowCards ?? 0}/${stats.redCards ?? 0}`,
+        `${t("minutes")} ${match.minutes ?? "—"}`,
+        clutch.points ? `${t("clutchScore")} ${Number(clutch.points).toFixed(2)}` : ""
+      ].filter(Boolean);
+
+      return `
+        <article class="player-match-card">
+          <div>
+            <strong>${escapeHtml(match.matchName ?? "")}</strong>
+            <span>${escapeHtml(compactDayText(new Date(match.date)))}</span>
+          </div>
+          <div class="player-match-rating">${Number(match.rating).toFixed(1)}</div>
+          <p>${escapeHtml(statLine.join(" · "))}</p>
+          <small>${escapeHtml(componentsText(match.components ?? []))}</small>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderPlayerModal(profile) {
+  const metrics = playerSummaryMetrics(profile);
+  return `
+    <header class="player-modal-header">
+      <div>
+        <p>${escapeHtml(t("playerDetails"))}</p>
+        <h2 id="playerModalTitle">${escapeHtml(profile.name ?? "")}</h2>
+        <span>${escapeHtml([displayTeamName(profile.team ?? {}), positionText(profile), profile.jersey ? `#${profile.jersey}` : ""].filter(Boolean).join(" · "))}</span>
+      </div>
+      ${profile.team?.logo ? `<img src="${escapeHtml(profile.team.logo)}" alt="" />` : ""}
+    </header>
+    <div class="player-modal-metrics">
+      ${metrics
+        .map(
+          ([label, value]) => `
+            <div>
+              <span>${escapeHtml(label)}</span>
+              <strong>${escapeHtml(value)}</strong>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+    <section class="player-modal-section">
+      <h3>${escapeHtml(t("ratingTrend"))}</h3>
+      ${ratingTrendMarkup(profile.matches ?? [])}
+    </section>
+    <section class="player-modal-section">
+      <h3>${escapeHtml(t("matchBreakdown"))}</h3>
+      <div class="player-match-list">${playerMatchRows(profile.matches ?? [])}</div>
+    </section>
+  `;
+}
+
+function openPlayerModal(playerId) {
+  const profile = playerProfileIndex().get(playerId);
+  if (!profile) return;
+  els.playerModalContent.innerHTML = renderPlayerModal(profile);
+  els.playerModal.hidden = false;
+  document.body.classList.add("modal-open");
+  els.playerModal.querySelector(".player-modal-close")?.focus();
+}
+
+function closePlayerModal() {
+  els.playerModal.hidden = true;
+  els.playerModalContent.innerHTML = "";
+  document.body.classList.remove("modal-open");
+}
+
 function renderRatings() {
   const ratings = state.data.playerRatings ?? {};
   const high = (ratings.high ?? []).filter(playerMatchesSelectedStar);
   const low = (ratings.low ?? []).filter(playerMatchesSelectedStar);
+  const clutch = (ratings.clutch ?? []).filter(playerMatchesSelectedStar);
+  const efficiency = (ratings.efficiency ?? []).filter(playerMatchesSelectedStar);
   const formulaMarkup = ratingFormulaMarkup(ratings.formula);
   const metaMarkup = ratingMetaMarkup(ratings);
   renderStarFilters();
   els.highRatingsFormula.innerHTML = formulaMarkup;
   els.lowRatingsFormula.innerHTML = formulaMarkup;
+  els.clutchFormula.innerHTML = rankingRuleMarkup(ratings.clutchFormula);
+  els.efficiencyFormula.innerHTML = rankingRuleMarkup(ratings.efficiencyFormula);
   els.highRatingsMeta.innerHTML = metaMarkup;
   els.lowRatingsMeta.innerHTML = metaMarkup;
+  els.clutchMeta.innerHTML = metaMarkup;
+  els.efficiencyMeta.innerHTML = metaMarkup;
+  els.clutchTable.innerHTML = `
+    ${clutchHeader()}
+    ${clutchRows(clutch)}
+  `;
+  els.efficiencyTable.innerHTML = `
+    ${efficiencyHeader()}
+    ${efficiencyRows(efficiency)}
+  `;
   els.highRatingsTable.innerHTML = `
     ${ratingsHeader("high")}
     ${ratingsRows(high, "high")}
@@ -1903,6 +2272,8 @@ function setView(view) {
   els.bracketView.classList.toggle("active", view === "bracket");
   els.scorersView.classList.toggle("active", view === "scorers");
   els.assistsView.classList.toggle("active", view === "assists");
+  els.clutchView.classList.toggle("active", view === "clutch");
+  els.efficiencyView.classList.toggle("active", view === "efficiency");
   els.highRatingsView.classList.toggle("active", view === "highRatings");
   els.lowRatingsView.classList.toggle("active", view === "lowRatings");
   els.oddsView.classList.toggle("active", view === "odds");
@@ -1930,6 +2301,8 @@ async function loadData() {
     els.recentResultsList.innerHTML = message;
     els.scorersTable.innerHTML = message;
     els.assistsTable.innerHTML = message;
+    els.clutchTable.innerHTML = message;
+    els.efficiencyTable.innerHTML = message;
     els.highRatingsTable.innerHTML = message;
     els.lowRatingsTable.innerHTML = message;
   }
@@ -1977,6 +2350,21 @@ document.addEventListener("click", (event) => {
   state.starPlayer = button.dataset.starPlayer;
   renderLeaderboards();
   renderRatings();
+});
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest?.("[data-player-id]");
+  if (!button) return;
+  openPlayerModal(button.dataset.playerId);
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest?.("[data-player-modal-close]")) return;
+  closePlayerModal();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !els.playerModal.hidden) closePlayerModal();
 });
 
 els.ratingDetailToggles.forEach((toggle) => {

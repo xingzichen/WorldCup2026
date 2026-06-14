@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>2026 世界杯赛程</title>
-    <link rel="stylesheet" href="/styles.css?v=2.0.5" />
+    <link rel="stylesheet" href="/styles.css?v=2.1.0" />
   </head>
   <body>
     <header class="topbar">
@@ -27,6 +27,8 @@
       <button class="tab" data-view="bracket" data-i18n="bracketTab" type="button">晋级图</button>
       <button class="tab" data-view="scorers" data-i18n="scorersTab" type="button">射手榜</button>
       <button class="tab" data-view="assists" data-i18n="assistsTab" type="button">助攻榜</button>
+      <button class="tab" data-view="clutch" data-i18n="clutchTab" type="button">关键先生榜</button>
+      <button class="tab" data-view="efficiency" data-i18n="efficiencyTab" type="button">效率榜</button>
       <button class="tab" data-view="highRatings" data-i18n="highRatingsTab" type="button">高分榜</button>
       <button class="tab" data-view="lowRatings" data-i18n="lowRatingsTab" type="button">低分榜</button>
       <button class="tab" data-view="odds" data-i18n="oddsTab" type="button">赔率</button>
@@ -162,6 +164,32 @@
         </section>
       </section>
 
+      <section class="panel" id="clutchView">
+        <section class="section-block leaderboard-section">
+          <h2 data-i18n="clutchTitle">关键先生榜</h2>
+          <p class="hint" data-i18n="clutchHint">统计扳平、反超、制胜球及相关助攻贡献，仅统计中场和前锋。</p>
+          <div class="rating-formula compact-rule" id="clutchFormula"></div>
+          <div class="leaderboard-star-filter" id="clutchStarFilters"></div>
+          <div class="leaderboard-meta" id="clutchMeta"></div>
+          <div class="leaderboard-table-wrap">
+            <table class="standings-table leaderboard-table ratings-table" id="clutchTable"></table>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel" id="efficiencyView">
+        <section class="section-block leaderboard-section">
+          <h2 data-i18n="efficiencyTitle">球员效率榜</h2>
+          <p class="hint" data-i18n="efficiencyHint">按平均评分、每 90 分钟进球、助攻和射正综合排序，仅统计中场和前锋。</p>
+          <div class="rating-formula compact-rule" id="efficiencyFormula"></div>
+          <div class="leaderboard-star-filter" id="efficiencyStarFilters"></div>
+          <div class="leaderboard-meta" id="efficiencyMeta"></div>
+          <div class="leaderboard-table-wrap">
+            <table class="standings-table leaderboard-table ratings-table" id="efficiencyTable"></table>
+          </div>
+        </section>
+      </section>
+
       <section class="panel" id="lowRatingsView">
         <section class="section-block leaderboard-section">
           <div class="section-title-row">
@@ -189,6 +217,14 @@
       <div class="empty-state" data-i18n="empty">暂无符合条件的比赛。</div>
     </template>
 
-    <script src="/app.js?v=2.0.5" type="module"></script>
+    <div class="player-modal" id="playerModal" hidden>
+      <button class="player-modal-backdrop" data-player-modal-close type="button" aria-label="关闭"></button>
+      <section class="player-dialog" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">
+        <button class="player-modal-close" data-player-modal-close type="button" aria-label="关闭">×</button>
+        <div id="playerModalContent"></div>
+      </section>
+    </div>
+
+    <script src="/app.js?v=2.1.0" type="module"></script>
   </body>
 </html>
