@@ -1256,13 +1256,13 @@ const bracketTreeSizes = {
 const bracketColumnOffsets = {
   "left-round-of-32": 0,
   "left-round-of-16": 220,
-  "left-quarterfinals": 440,
-  "left-semifinals": 660,
-  final: 880,
-  "right-semifinals": 1100,
-  "right-quarterfinals": 1320,
-  "right-round-of-16": 1540,
-  "right-round-of-32": 1760
+  "left-quarterfinals": 440 - bracketTreeSizes.columnWidth * 0.75,
+  "left-semifinals": 660 - 294,
+  final: 880 - 296,
+  "right-semifinals": 1100 + 294 - 592,
+  "right-quarterfinals": 1320 + bracketTreeSizes.columnWidth * 0.75 - 592,
+  "right-round-of-16": 1540 - 592,
+  "right-round-of-32": 1760 - 592
 };
 
 function bracketColumnX(key) {
@@ -1343,7 +1343,7 @@ function buildBracketTreeLayout(byStage) {
       positions.set(bracketMatchKey(stage, number), position);
       if (matchNumber) positionsByMatchNumber.set(matchNumber, position);
       matchRecords.push(position);
-      refs.forEach((item) => connectorRecords.push({ from: item.position, to: position }));
+      refs.forEach((item, sourceIndex) => connectorRecords.push({ from: item.position, to: position, sourceIndex }));
     });
   });
 
@@ -1351,8 +1351,20 @@ function buildBracketTreeLayout(byStage) {
   return { positions, matchRecords, connectorRecords, width };
 }
 
-function bracketConnectorPath(from, to) {
+function bracketConnectorPath(from, to, sourceIndex = 0) {
   const { columnWidth, matchHeight } = bracketTreeSizes;
+  const usesOffsetPanelEntry =
+    (from.stage === "round-of-16" && to.stage === "quarterfinals") ||
+    (from.stage === "quarterfinals" && to.stage === "semifinals");
+  if (usesOffsetPanelEntry) {
+    const isLeft = to.side === "left";
+    const startX = isLeft ? from.x + columnWidth : from.x;
+    const startY = from.y + matchHeight / 2;
+    const targetX = to.x + columnWidth * (isLeft ? 2 / 3 : 1 / 3);
+    const targetY = sourceIndex === 0 ? to.y + 20 : to.y + matchHeight;
+    return `M ${startX} ${startY} H ${targetX} V ${targetY}`;
+  }
+
   const flowsRight = from.x < to.x;
   const startX = flowsRight ? from.x + columnWidth : from.x;
   const startY = from.y + matchHeight / 2;
@@ -1426,7 +1438,9 @@ function bracketTree(matchLayout, byStage) {
     ...matchLayout.matchRecords.map((record) => record.y + matchHeight),
     thirdPlaceMatch ? sideTop + 118 : 0
   ) + paddingBottom;
-  const paths = matchLayout.connectorRecords.map((connector) => bracketConnectorPath(connector.from, connector.to));
+  const paths = matchLayout.connectorRecords.map((connector) =>
+    bracketConnectorPath(connector.from, connector.to, connector.sourceIndex)
+  );
 
   return `
     <div class="bracket-tree" style="width: ${width}px; height: ${height}px;">
