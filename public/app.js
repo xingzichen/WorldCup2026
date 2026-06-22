@@ -21,6 +21,7 @@ const messages = {
     groupFilterLabel: "小组",
     continentFilterLabel: "大洲",
     popularFilterLabel: "热门球队",
+    showAllResults: "显示所有历史赛果",
     all: "全部",
     allGroups: "全部小组",
     allContinents: "全部大洲",
@@ -38,7 +39,8 @@ const messages = {
     completedResults: "已完赛结果",
     recentResults: "最近完赛",
     bracketTitle: "淘汰赛晋级图",
-    bracketHint: "小组赛未结束时，格子显示晋级名额；鼠标悬停可查看按当前排名推演的球队。",
+    bracketHint: "按当前小组排名实时推演 32 强对阵；比赛结束后将自动替换为实际晋级球队。",
+    liveProjection: "实时推演",
     projectedTeam: "当前对应球队",
     projectedTeams: "当前候选球队",
     noProjection: "暂无当前推演",
@@ -178,6 +180,7 @@ const messages = {
     groupFilterLabel: "Group",
     continentFilterLabel: "Continent",
     popularFilterLabel: "Popular Teams",
+    showAllResults: "Show all past results",
     all: "All",
     allGroups: "All groups",
     allContinents: "All continents",
@@ -195,7 +198,8 @@ const messages = {
     completedResults: "Completed Results",
     recentResults: "Recent Results",
     bracketTitle: "Knockout Bracket",
-    bracketHint: "Before group play is settled, slots show qualification placeholders. Hover a slot to see the current projected team.",
+    bracketHint: "Round-of-32 matchups are projected from the live group tables and replaced automatically as teams qualify.",
+    liveProjection: "Live projection",
     projectedTeam: "Current projection",
     projectedTeams: "Current candidates",
     noProjection: "No current projection",
@@ -554,6 +558,7 @@ const state = {
   group: "all",
   continent: "all",
   popularTeam: "all",
+  showAllResults: false,
   starPlayer: "all",
   ratingDetailsVisible: false,
   lang: localStorage.getItem("worldcup-lang") || "zh"
@@ -606,6 +611,7 @@ const els = {
   groupFilter: document.querySelector("#groupFilter"),
   continentFilter: document.querySelector("#continentFilter"),
   popularTeamFilters: document.querySelector("#popularTeamFilters"),
+  showAllResults: document.querySelector("#showAllResults"),
   completedCount: document.querySelector("#completedCount"),
   nextMatch: document.querySelector("#nextMatch"),
   updatedAt: document.querySelector("#updatedAt"),
@@ -1090,12 +1096,69 @@ function slotTooltip(name) {
   return lines.length ? lines : [t("noProjection")];
 }
 
-function bracketSlot(team) {
-  const label = displayTeamName(team);
+let thirdSlotAssignments = new Map();
+
+function projectedEntryForSlot(name, slotKey = "") {
+  const text = String(name ?? "");
+  let match = text.match(/^Group ([A-L]) Winner$/);
+  if (match) return groupEntry(match[1], 1);
+  match = text.match(/^Group ([A-L]) 2nd Place$/);
+  if (match) return groupEntry(match[1], 2);
+  if (/^Third Place Group /.test(text)) return thirdSlotAssignments.get(slotKey) ?? null;
+  return null;
+}
+
+function buildThirdSlotAssignments(roundOf32Matches = []) {
+  const slots = [];
+  roundOf32Matches.forEach((match) => {
+    ["home", "away"].forEach((side) => {
+      const name = match[side]?.name ?? "";
+      const parsed = name.match(/^Third Place Group ([A-L/]+)$/);
+      if (parsed) slots.push({ key: `${match.id}:${side}`, groups: parsed[1].split("/") });
+    });
+  });
+
+  const advancing = (state.data?.standings?.thirdPlace ?? []).filter((entry) => entry.currentlyAdvancing);
+  let best = null;
+  const orderedSlots = slots.toSorted((a, b) => {
+    const aCount = advancing.filter((entry) => a.groups.includes(entry.group.replace("Group ", ""))).length;
+    const bCount = advancing.filter((entry) => b.groups.includes(entry.group.replace("Group ", ""))).length;
+    return aCount - bCount;
+  });
+
+  function search(index, used, assignments, cost) {
+    if (best && cost >= best.cost) return;
+    if (index === orderedSlots.length) {
+      best = { cost, assignments: new Map(assignments) };
+      return;
+    }
+    const slot = orderedSlots[index];
+    const candidates = advancing
+      .filter((entry) => slot.groups.includes(entry.group.replace("Group ", "")) && !used.has(entry.team.name))
+      .toSorted((a, b) => a.thirdRank - b.thirdRank);
+    for (const entry of candidates) {
+      used.add(entry.team.name);
+      assignments.set(slot.key, entry);
+      search(index + 1, used, assignments, cost + entry.thirdRank);
+      assignments.delete(slot.key);
+      used.delete(entry.team.name);
+    }
+  }
+
+  search(0, new Set(), new Map(), 0);
+  return best?.assignments ?? new Map();
+}
+
+function bracketSlot(team, slotKey = "") {
+  const projected = projectedEntryForSlot(team.name, slotKey);
+  const shownTeam = projected?.team ?? team;
+  const label = displayTeamName(shownTeam);
   const tooltipLines = slotTooltip(team.name);
   return `
-    <div class="bracket-slot" tabindex="0">
+    <div class="bracket-slot${projected ? " is-projected" : ""}" tabindex="0">
+      ${shownTeam.logo ? `<img src="${escapeHtml(shownTeam.logo)}" alt="" loading="lazy" />` : `<span class="bracket-team-mark" aria-hidden="true"></span>`}
       <span>${escapeHtml(label)}</span>
+      ${projected ? `<small>${escapeHtml(translatePlaceholderName(team.name))}</small>` : ""}
       <div class="bracket-tooltip">${tooltipLines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}</div>
     </div>
   `;
@@ -1145,14 +1208,62 @@ function activeBracketSlot() {
 }
 
 const bracketTreeStages = ["round-of-32", "round-of-16", "quarterfinals", "semifinals", "final"];
+const officialMatchNumberByEventId = new Map([
+  ["7600486", 74], ["7600487", 77], ["7600489", 73], ["7600488", 75],
+  ["7600490", 83], ["7600492", 84], ["7600491", 81], ["7600495", 82],
+  ["7600493", 76], ["7600494", 78], ["7600497", 79], ["7600496", 80],
+  ["7600498", 86], ["7600499", 88], ["7600500", 85], ["7600501", 87],
+  ["7600502", 89], ["7600503", 90], ["7600504", 91], ["7600505", 92],
+  ["7600507", 93], ["7600506", 94], ["7600508", 95], ["7600509", 96],
+  ["7600510", 97], ["7600511", 98], ["7600512", 99], ["7600513", 100],
+  ["7600514", 101], ["7600515", 102], ["7600516", 103], ["7600517", 104]
+]);
+
+const bracketDisplayOrder = {
+  "round-of-32": [74, 77, 73, 75, 83, 84, 81, 82, 76, 78, 79, 80, 86, 88, 85, 87],
+  "round-of-16": [89, 90, 93, 94, 91, 92, 95, 96],
+  quarterfinals: [97, 98, 99, 100],
+  semifinals: [101, 102],
+  final: [104]
+};
+
+const bracketSourceMatchNumbers = new Map([
+  [89, [74, 77]], [90, [73, 75]], [93, [83, 84]], [94, [81, 82]],
+  [91, [76, 78]], [92, [79, 80]], [95, [86, 88]], [96, [85, 87]],
+  [97, [89, 90]], [98, [93, 94]], [99, [91, 92]], [100, [95, 96]],
+  [101, [97, 98]], [102, [99, 100]], [104, [101, 102]]
+]);
+
+function officialMatchNumber(match) {
+  return officialMatchNumberByEventId.get(String(match?.id ?? "")) ?? null;
+}
+
+function bracketDisplayIndex(stage, match, fallbackIndex) {
+  const matchNumber = officialMatchNumber(match);
+  const index = bracketDisplayOrder[stage]?.indexOf(matchNumber) ?? -1;
+  return index >= 0 ? index : fallbackIndex;
+}
+
 const bracketTreeSizes = {
-  columnWidth: 232,
-  columnGap: 50,
-  matchHeight: 76,
-  rowGap: 26,
-  labelHeight: 34,
+  columnWidth: 196,
+  columnGap: 24,
+  matchHeight: 84,
+  rowGap: 24,
+  labelHeight: 10,
   paddingBottom: 24
 };
+
+const bracketColumnOffsets = {
+  "left-round-of-32": 0,
+  "left-round-of-16": 220,
+  "left-quarterfinals": 440,
+  "left-semifinals": 660,
+  final: 880
+};
+
+function bracketColumnX(key) {
+  return bracketColumnOffsets[key] ?? 0;
+}
 
 function compactDayText(date) {
   return makeDateFormatter({
@@ -1191,44 +1302,56 @@ function sourceRefsForMatch(match) {
 }
 
 function buildBracketTreeLayout(byStage) {
-  const { columnWidth, columnGap, matchHeight, rowGap, labelHeight } = bracketTreeSizes;
+  const { columnWidth, matchHeight, rowGap, labelHeight } = bracketTreeSizes;
   const rowStep = matchHeight + rowGap;
   const positions = new Map();
+  const positionsByMatchNumber = new Map();
   const matchRecords = [];
   const connectorRecords = [];
 
-  bracketTreeStages.forEach((stage, stageIndex) => {
+  bracketTreeStages.forEach((stage) => {
     const matches = byStage.get(stage) ?? [];
     matches.forEach((match, index) => {
       const number = index + 1;
-      const refs = sourceRefsForMatch(match)
-        .map((ref) => ({ ref, position: positions.get(bracketMatchKey(ref.stage, ref.number)) }))
-        .filter((item) => item.position);
+      const displayIndex = bracketDisplayIndex(stage, match, index);
+      const side = stage === "final" ? "center" : "left";
+      const sideIndex = displayIndex;
+      const matchNumber = officialMatchNumber(match);
+      const explicitSources = bracketSourceMatchNumbers.get(matchNumber);
+      const refs = explicitSources
+        ? explicitSources.map((sourceNumber) => ({ position: positionsByMatchNumber.get(sourceNumber) })).filter((item) => item.position)
+        : sourceRefsForMatch(match)
+            .map((ref) => ({ ref, position: positions.get(bracketMatchKey(ref.stage, ref.number)) }))
+            .filter((item) => item.position);
       const sourceCenter = refs.length
         ? refs.reduce((sum, item) => sum + item.position.y + matchHeight / 2, 0) / refs.length
         : null;
       const position = {
         stage,
+        side,
         number,
         match,
-        x: stageIndex * (columnWidth + columnGap),
-        y: sourceCenter === null ? labelHeight + index * rowStep * Math.max(1, 2 ** stageIndex) : sourceCenter - matchHeight / 2
+        x: bracketColumnX(stage === "final" ? "final" : `${side}-${stage}`),
+        y: sourceCenter === null ? labelHeight + sideIndex * rowStep : sourceCenter - matchHeight / 2
       };
 
       positions.set(bracketMatchKey(stage, number), position);
+      if (matchNumber) positionsByMatchNumber.set(matchNumber, position);
       matchRecords.push(position);
       refs.forEach((item) => connectorRecords.push({ from: item.position, to: position }));
     });
   });
 
-  return { positions, matchRecords, connectorRecords };
+  const width = Math.max(...Object.values(bracketColumnOffsets)) + columnWidth;
+  return { positions, matchRecords, connectorRecords, width };
 }
 
 function bracketConnectorPath(from, to) {
   const { columnWidth, matchHeight } = bracketTreeSizes;
-  const startX = from.x + columnWidth;
+  const flowsRight = from.x < to.x;
+  const startX = flowsRight ? from.x + columnWidth : from.x;
   const startY = from.y + matchHeight / 2;
-  const endX = to.x;
+  const endX = flowsRight ? to.x : to.x + columnWidth;
   const endY = to.y + matchHeight / 2;
   const midX = startX + (endX - startX) / 2;
   return `M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`;
@@ -1237,15 +1360,17 @@ function bracketConnectorPath(from, to) {
 function bracketTreeMatch(record) {
   const date = new Date(record.match.date);
   const place = bracketPlaceText(record.match);
+  const matchNumber = officialMatchNumber(record.match) ?? record.match.id;
   return `
-    <article class="bracket-tree-match" style="left: ${record.x}px; top: ${record.y}px;">
+    <article class="bracket-tree-match stage-${escapeHtml(record.stage)} side-${escapeHtml(record.side)}" style="left: ${record.x}px; top: ${record.y}px;">
       <div class="bracket-tree-meta">
-        <span>${escapeHtml(compactDayText(date))}</span>
+        <span>${escapeHtml(t(stageLabelKeys[record.stage]))} · ${escapeHtml(compactDayText(date))}</span>
         ${place ? `<strong>${escapeHtml(place)}</strong>` : ""}
+        <b>M${escapeHtml(matchNumber)}</b>
       </div>
       <div class="bracket-tree-box">
-        ${bracketSlot(record.match.home)}
-        ${bracketSlot(record.match.away)}
+        ${bracketSlot(record.match.home, `${record.match.id}:home`)}
+        ${bracketSlot(record.match.away, `${record.match.id}:away`)}
       </div>
     </article>
   `;
@@ -1262,7 +1387,7 @@ function bracketSideMatch(match, mainLayout) {
   };
 
   return `
-    <section class="bracket-side-match" style="left: ${record.x}px; top: ${record.y}px;">
+    <section class="bracket-side-match stage-third-place" style="left: ${record.x}px; top: ${record.y}px;">
       <h3>${escapeHtml(t("thirdPlaceMatch"))}</h3>
       <div class="bracket-tree-meta">
         <span>${escapeHtml(compactDayText(new Date(match.date)))}</span>
@@ -1276,16 +1401,6 @@ function bracketSideMatch(match, mainLayout) {
   `;
 }
 
-function bracketTreeLabels() {
-  const { columnWidth, columnGap } = bracketTreeSizes;
-  return bracketTreeStages
-    .map((stage, index) => {
-      const x = index * (columnWidth + columnGap);
-      return `<div class="bracket-tree-label" style="left: ${x}px;">${escapeHtml(t(stageLabelKeys[stage]))}</div>`;
-    })
-    .join("");
-}
-
 function bracketConnectors(paths, width, height) {
   if (!paths.length) return "";
   return `
@@ -1296,12 +1411,12 @@ function bracketConnectors(paths, width, height) {
 }
 
 function bracketTree(matchLayout, byStage) {
-  const { columnWidth, columnGap, matchHeight, paddingBottom } = bracketTreeSizes;
+  const { matchHeight, paddingBottom } = bracketTreeSizes;
   const thirdPlaceMatch = byStage.get("3rd-place-match")?.[0];
   const sideTop = thirdPlaceMatch
     ? (matchLayout.positions.get(bracketMatchKey("final", 1))?.y ?? 0) + matchHeight + 54
     : 0;
-  const width = bracketTreeStages.length * columnWidth + (bracketTreeStages.length - 1) * columnGap;
+  const width = matchLayout.width;
   const height = Math.max(
     ...matchLayout.matchRecords.map((record) => record.y + matchHeight),
     thirdPlaceMatch ? sideTop + 118 : 0
@@ -1311,7 +1426,6 @@ function bracketTree(matchLayout, byStage) {
   return `
     <div class="bracket-tree" style="width: ${width}px; height: ${height}px;">
       ${bracketConnectors(paths, width, height)}
-      ${bracketTreeLabels()}
       ${matchLayout.matchRecords.map((record) => bracketTreeMatch(record)).join("")}
       ${bracketSideMatch(thirdPlaceMatch, matchLayout)}
     </div>
@@ -1320,6 +1434,7 @@ function bracketTree(matchLayout, byStage) {
 
 function renderBracket() {
   const byStage = knockoutMatchesByStage();
+  thirdSlotAssignments = buildThirdSlotAssignments(byStage.get("round-of-32") ?? []);
   const layout = buildBracketTreeLayout(byStage);
   els.bracketBoard.innerHTML = layout.matchRecords.length ? bracketTree(layout, byStage) : `<div class="empty">${escapeHtml(t("empty"))}</div>`;
 }
@@ -1354,7 +1469,11 @@ function renderMatchList(container, matches, withDayHeadings = true) {
 
 function filteredMatches() {
   const needle = state.search.trim().toLowerCase();
+  const resultCutoff = Date.now() - 2 * 24 * 60 * 60 * 1000;
   return state.data.matches.filter((match) => {
+    const isOldResult = match.status.state === "post" && new Date(match.date).getTime() < resultCutoff;
+    if (!state.showAllResults && isOldResult) return false;
+
     const statusOk = state.status === "all" || match.status.state === state.status;
     if (!statusOk) return false;
 
@@ -2240,6 +2359,7 @@ function renderChrome() {
   document.querySelectorAll(".lang-btn").forEach((button) => {
     button.classList.toggle("active", button.dataset.lang === state.lang);
   });
+  els.showAllResults.checked = state.showAllResults;
   els.matchSearch.placeholder = t("searchPlaceholder");
   els.statusFilter.querySelectorAll("option").forEach((option) => {
     option.textContent = t(option.dataset.i18n);
@@ -2344,6 +2464,11 @@ els.popularTeamFilters.addEventListener("click", (event) => {
   renderSchedule();
 });
 
+els.showAllResults.addEventListener("change", (event) => {
+  state.showAllResults = event.target.checked;
+  renderSchedule();
+});
+
 document.addEventListener("click", (event) => {
   const button = event.target.closest?.("[data-star-player]");
   if (!button) return;
@@ -2432,3 +2557,11 @@ window.addEventListener("resize", () => {
 });
 
 loadData();
+
+window.setInterval(() => {
+  if (!document.hidden) loadData();
+}, 60_000);
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadData();
+});

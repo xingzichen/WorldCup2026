@@ -185,6 +185,12 @@ select {
   margin-bottom: 18px;
 }
 
+.schedule-history-toggle {
+  grid-column: 2;
+  width: fit-content;
+  margin-top: 2px;
+}
+
 .quick-filter-heading {
   padding-top: 8px;
   color: var(--muted);
@@ -437,12 +443,60 @@ select {
 
 .bracket-section {
   margin-top: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #061d54;
+  box-shadow: 0 24px 70px rgba(4, 24, 72, 0.24);
+}
+
+.bracket-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px 30px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  background: linear-gradient(120deg, #082b75, #061d54 58%, #0c3679);
+}
+
+.bracket-heading h2 {
+  margin-bottom: 7px;
+  font-size: 28px;
+}
+
+.bracket-heading .hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.bracket-live {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  padding: 9px 13px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+}
+
+.bracket-live span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #49e3a8;
+  box-shadow: 0 0 0 5px rgba(73, 227, 168, 0.13);
 }
 
 .bracket-board {
   display: block;
   overflow-x: auto;
-  padding: 4px 0 18px;
+  padding: 24px 30px 30px;
+  background:
+    radial-gradient(circle at 70% 32%, rgba(45, 126, 255, 0.15), transparent 30%),
+    linear-gradient(180deg, #061d54, #041944);
 }
 
 .bracket-tree {
@@ -459,31 +513,17 @@ select {
 
 .bracket-connectors path {
   fill: none;
-  stroke: #2b2f33;
-  stroke-width: 2;
+  stroke: rgba(182, 218, 255, 0.84);
+  stroke-width: 2.5;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
-}
-
-.bracket-tree-label {
-  position: absolute;
-  top: 0;
-  z-index: 1;
-  width: 232px;
-  margin: 0;
-  padding: 0 2px;
-  color: var(--accent-strong);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.2;
-  text-transform: uppercase;
 }
 
 .bracket-tree-match,
 .bracket-side-match {
   position: absolute;
   z-index: 2;
-  width: 232px;
+  width: 196px;
 }
 
 .bracket-tree-match.is-tooltip-active,
@@ -497,30 +537,50 @@ select {
   align-items: center;
   gap: 5px;
   overflow: hidden;
-  color: var(--ink);
-  font-size: 13px;
+  justify-content: space-between;
+  color: rgba(255,255,255,.78);
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
 }
 
 .bracket-tree-meta strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--accent-strong);
-  font-weight: 900;
-  text-overflow: ellipsis;
+  display: none;
+}
+
+.bracket-tree-meta b {
+  margin-left: auto;
+  color: #fff;
+  font-size: 12px;
 }
 
 .bracket-tree-box {
-  border: 1px solid #a8adb3;
-  border-right-color: #c6cbd0;
-  background: #f7f8fa;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #165dff, #1045ce);
+  box-shadow: 0 12px 28px rgba(0,0,0,.22);
+}
+
+.stage-round-of-16 .bracket-tree-box { background: linear-gradient(135deg, #176ef5, #0e9dbb); }
+.stage-quarterfinals .bracket-tree-box { background: linear-gradient(135deg, #08a99b, #16c48d); }
+.stage-semifinals .bracket-tree-box { background: linear-gradient(135deg, #66b934, #9bc43b); }
+.stage-final .bracket-tree-box { background: linear-gradient(145deg, #d6b264, #87500c); }
+.stage-third-place .bracket-tree-box { background: linear-gradient(145deg, #a76b18, #6f3d08); }
+
+.stage-final {
+  transform: scale(1.08);
+  transform-origin: center;
+}
+
+.side-right .bracket-tree-meta {
+  flex-direction: row-reverse;
 }
 
 .bracket-side-match h3 {
   margin: 0 0 4px;
-  color: var(--accent-strong);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 12px;
   line-height: 1.2;
   text-transform: uppercase;
@@ -529,17 +589,44 @@ select {
 .bracket-slot {
   position: relative;
   display: flex;
-  min-height: 27px;
+  min-height: 31px;
   align-items: center;
   border: 0;
-  border-bottom: 1px solid #a8adb3;
-  padding: 4px 6px;
-  background: #fafafa;
-  color: var(--ink);
-  font-size: 14px;
+  gap: 7px;
+  border-bottom: 1px solid rgba(255,255,255,.18);
+  padding: 5px 8px;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.25;
   outline: none;
+}
+
+.bracket-slot img {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.bracket-team-mark {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,.32);
+  border-radius: 50%;
+}
+
+.bracket-slot small {
+  margin-left: auto;
+  max-width: 44px;
+  overflow: hidden;
+  color: rgba(255,255,255,.58);
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bracket-slot:last-child {
@@ -1388,6 +1475,20 @@ body.modal-open {
     justify-content: start;
   }
 
+  .bracket-heading {
+    display: grid;
+    gap: 14px;
+    padding: 20px;
+  }
+
+  .bracket-live {
+    width: fit-content;
+  }
+
+  .bracket-board {
+    padding: 20px;
+  }
+
   .toolbar,
   .summary-grid,
   .recent-results-grid,
@@ -1412,6 +1513,10 @@ body.modal-open {
 
   .quick-filter-bar {
     grid-template-columns: 1fr;
+  }
+
+  .schedule-history-toggle {
+    grid-column: 1;
   }
 
   .leaderboard-star-filter {

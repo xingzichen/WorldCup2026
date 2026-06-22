@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>2026 世界杯赛程</title>
-    <link rel="stylesheet" href="/styles.css?v=2.1.0" />
+    <link rel="stylesheet" href="/styles.css?v=2.3.6" />
   </head>
   <body>
     <header class="topbar">
@@ -62,6 +62,11 @@
         <div class="quick-filter-bar">
           <div class="quick-filter-heading" data-i18n="popularFilterLabel">热门球队</div>
           <div class="chip-row" id="popularTeamFilters"></div>
+          <label class="switch-control schedule-history-toggle">
+            <input id="showAllResults" type="checkbox" />
+            <span></span>
+            <strong data-i18n="showAllResults">显示所有历史赛果</strong>
+          </label>
         </div>
         <div class="match-list" id="scheduleList"></div>
       </section>
@@ -103,8 +108,13 @@
 
       <section class="panel" id="bracketView">
         <section class="section-block bracket-section">
-          <h2 data-i18n="bracketTitle">淘汰赛晋级图</h2>
-          <p class="hint" data-i18n="bracketHint">小组赛未结束时，格子显示晋级名额；鼠标悬停可查看按当前排名推演的球队。</p>
+          <div class="bracket-heading">
+            <div>
+              <h2 data-i18n="bracketTitle">淘汰赛晋级图</h2>
+              <p class="hint" data-i18n="bracketHint">按当前小组排名实时推演 32 强对阵；比赛结束后将自动替换为实际晋级球队。</p>
+            </div>
+            <div class="bracket-live"><span></span><strong data-i18n="liveProjection">实时推演</strong></div>
+          </div>
           <div class="bracket-board" id="bracketBoard"></div>
         </section>
       </section>
@@ -225,6 +235,6 @@
       </section>
     </div>
 
-    <script src="/app.js?v=2.1.0" type="module"></script>
+    <script src="/app.js?v=2.3.6" type="module"></script>
   </body>
 </html>
