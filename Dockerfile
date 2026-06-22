@@ -1,7 +1,7 @@
 FROM node:22-alpine
 
 LABEL org.opencontainers.image.title="WorldCup2026" \
-  org.opencontainers.image.version="5.0" \
+  org.opencontainers.image.version="6.0" \
   org.opencontainers.image.source="https://github.com/xingzichen/WorldCup2026"
 
 WORKDIR /app

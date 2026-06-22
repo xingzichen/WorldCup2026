@@ -1,7 +1,7 @@
 services:
   worldcup2026:
     build: .
-    image: giraffee/worldcup2026:5.0
+    image: giraffee/worldcup2026:6.0
     ports:
       - "5173:5173"
     environment:
