@@ -1258,7 +1258,11 @@ const bracketColumnOffsets = {
   "left-round-of-16": 220,
   "left-quarterfinals": 440,
   "left-semifinals": 660,
-  final: 880
+  final: 880,
+  "right-semifinals": 1100,
+  "right-quarterfinals": 1320,
+  "right-round-of-16": 1540,
+  "right-round-of-32": 1760
 };
 
 function bracketColumnX(key) {
@@ -1311,11 +1315,12 @@ function buildBracketTreeLayout(byStage) {
 
   bracketTreeStages.forEach((stage) => {
     const matches = byStage.get(stage) ?? [];
+    const sideSize = stage === "final" ? 1 : Math.ceil(matches.length / 2);
     matches.forEach((match, index) => {
       const number = index + 1;
       const displayIndex = bracketDisplayIndex(stage, match, index);
-      const side = stage === "final" ? "center" : "left";
-      const sideIndex = displayIndex;
+      const side = stage === "final" ? "center" : displayIndex < sideSize ? "left" : "right";
+      const sideIndex = side === "right" ? displayIndex - sideSize : displayIndex;
       const matchNumber = officialMatchNumber(match);
       const explicitSources = bracketSourceMatchNumbers.get(matchNumber);
       const refs = explicitSources
