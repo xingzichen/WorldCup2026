@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "public");
@@ -142,6 +142,14 @@ function statMap(stats = []) {
   );
 }
 
+function firstNumericStat(stats, names) {
+  for (const name of names) {
+    const value = Number(stats[name]?.value);
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
 function loadPersistedPlayerRatingsCache() {
   try {
     const persisted = JSON.parse(readFileSync(PLAYER_RATINGS_CACHE_FILE, "utf8"));
@@ -271,9 +279,172 @@ function fifaRankForTeam(team) {
 function compareProjectedStandings(a, b) {
   if (b.points !== a.points) return b.points - a.points;
   if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
-  if (a.fifaRank !== b.fifaRank) return a.fifaRank - b.fifaRank;
   if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+  if ((b.teamConductScore ?? 0) !== (a.teamConductScore ?? 0)) {
+    return (b.teamConductScore ?? 0) - (a.teamConductScore ?? 0);
+  }
+  if (a.fifaRank !== b.fifaRank) return a.fifaRank - b.fifaRank;
   return a.team.name.localeCompare(b.team.name);
+}
+
+function teamIdentityValues(team = {}) {
+  const values = [
+    team.name,
+    team.shortName,
+    team.abbreviation,
+    fifaRankingName(team.name),
+    fifaRankingName(team.shortName)
+  ].filter(Boolean);
+
+  return new Set(values.map(normalizeTeamKey).filter(Boolean));
+}
+
+function findGroupEntryForTeam(entries, team) {
+  const matchIdentities = teamIdentityValues(team);
+  return entries.find((entry) => {
+    const entryIdentities = teamIdentityValues(entry.team);
+    return [...matchIdentities].some((value) => entryIdentities.has(value));
+  });
+}
+
+function matchHasUsableScore(match) {
+  return (
+    match?.stage === "group-stage" &&
+    match.status?.state !== "pre" &&
+    Number.isFinite(match.home?.score) &&
+    Number.isFinite(match.away?.score)
+  );
+}
+
+function groupMatchesForEntries(entries, matches = []) {
+  return matches
+    .filter(matchHasUsableScore)
+    .map((match) => {
+      const homeEntry = findGroupEntryForTeam(entries, match.home);
+      const awayEntry = findGroupEntryForTeam(entries, match.away);
+      if (!homeEntry || !awayEntry || homeEntry.team.name === awayEntry.team.name) return null;
+
+      return {
+        home: homeEntry.team.name,
+        away: awayEntry.team.name,
+        homeGoals: match.home.score,
+        awayGoals: match.away.score
+      };
+    })
+    .filter(Boolean);
+}
+
+function makeEmptyHeadToHeadStats(entries) {
+  return new Map(
+    entries.map((entry) => [
+      entry.team.name,
+      {
+        points: 0,
+        goalDifference: 0,
+        goalsFor: 0
+      }
+    ])
+  );
+}
+
+function headToHeadStats(entries, matches) {
+  const teamNames = new Set(entries.map((entry) => entry.team.name));
+  const stats = makeEmptyHeadToHeadStats(entries);
+
+  for (const match of matches) {
+    if (!teamNames.has(match.home) || !teamNames.has(match.away)) continue;
+
+    const home = stats.get(match.home);
+    const away = stats.get(match.away);
+    home.goalsFor += match.homeGoals;
+    away.goalsFor += match.awayGoals;
+    home.goalDifference += match.homeGoals - match.awayGoals;
+    away.goalDifference += match.awayGoals - match.homeGoals;
+
+    if (match.homeGoals > match.awayGoals) {
+      home.points += 3;
+    } else if (match.awayGoals > match.homeGoals) {
+      away.points += 3;
+    } else {
+      home.points += 1;
+      away.points += 1;
+    }
+  }
+
+  return stats;
+}
+
+function headToHeadSignature(entry, stats) {
+  const item = stats.get(entry.team.name) ?? { points: 0, goalDifference: 0, goalsFor: 0 };
+  return [item.points, item.goalDifference, item.goalsFor].join("|");
+}
+
+function compareHeadToHead(a, b, stats) {
+  const aStats = stats.get(a.team.name) ?? { points: 0, goalDifference: 0, goalsFor: 0 };
+  const bStats = stats.get(b.team.name) ?? { points: 0, goalDifference: 0, goalsFor: 0 };
+  if (bStats.points !== aStats.points) return bStats.points - aStats.points;
+  if (bStats.goalDifference !== aStats.goalDifference) {
+    return bStats.goalDifference - aStats.goalDifference;
+  }
+  if (bStats.goalsFor !== aStats.goalsFor) return bStats.goalsFor - aStats.goalsFor;
+  return 0;
+}
+
+function applyOverallTiebreakers(entries) {
+  return [...entries].sort((a, b) => {
+    if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+    if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+    if ((b.teamConductScore ?? 0) !== (a.teamConductScore ?? 0)) {
+      return (b.teamConductScore ?? 0) - (a.teamConductScore ?? 0);
+    }
+    if (a.fifaRank !== b.fifaRank) return a.fifaRank - b.fifaRank;
+    return a.team.name.localeCompare(b.team.name);
+  });
+}
+
+function applyHeadToHeadTiebreakers(entries, matches) {
+  if (entries.length <= 1) return entries;
+
+  const stats = headToHeadStats(entries, matches);
+  const sorted = [...entries].sort((a, b) => compareHeadToHead(a, b, stats));
+  const signatureCount = new Set(sorted.map((entry) => headToHeadSignature(entry, stats))).size;
+  if (signatureCount === 1) return applyOverallTiebreakers(sorted);
+
+  const ranked = [];
+  for (let index = 0; index < sorted.length; ) {
+    const signature = headToHeadSignature(sorted[index], stats);
+    const tied = [];
+    while (index < sorted.length && headToHeadSignature(sorted[index], stats) === signature) {
+      tied.push(sorted[index]);
+      index += 1;
+    }
+
+    ranked.push(...(tied.length === 1 ? tied : applyHeadToHeadTiebreakers(tied, matches)));
+  }
+
+  return ranked;
+}
+
+function rankGroupEntries(entries, matches = []) {
+  const groupMatches = groupMatchesForEntries(entries, matches);
+  const sortedByPoints = [...entries].sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    return a.team.name.localeCompare(b.team.name);
+  });
+
+  const ranked = [];
+  for (let index = 0; index < sortedByPoints.length; ) {
+    const points = sortedByPoints[index].points;
+    const tied = [];
+    while (index < sortedByPoints.length && sortedByPoints[index].points === points) {
+      tied.push(sortedByPoints[index]);
+      index += 1;
+    }
+
+    ranked.push(...(tied.length === 1 ? tied : applyHeadToHeadTiebreakers(tied, groupMatches)));
+  }
+
+  return ranked.map((entry, index) => ({ ...entry, rank: index + 1 }));
 }
 
 function formatOddsValue(value) {
@@ -414,7 +585,7 @@ function normalizeEvent(event) {
   };
 }
 
-function normalizeStandings(rawStandings) {
+function normalizeStandings(rawStandings, matches = []) {
   const groups = (rawStandings.children ?? []).map((group) => {
     const entries = (group.standings?.entries ?? []).map((entry) => {
       const stats = statMap(entry.stats);
@@ -439,16 +610,18 @@ function normalizeStandings(rawStandings) {
         goalDifference: stats.pointDifferential?.value ?? 0,
         goalDifferenceDisplay: stats.pointDifferential?.displayValue ?? "0",
         points: stats.points?.value ?? 0,
+        teamConductScore: firstNumericStat(stats, [
+          "teamConductScore",
+          "fairPlayPoints"
+        ]),
         fifaRank: fifaRankForTeam(team)
       };
-    })
-      .sort(compareProjectedStandings)
-      .map((entry, index) => ({ ...entry, rank: index + 1 }));
+    });
 
     return {
       id: group.id,
       name: group.name,
-      entries
+      entries: rankGroupEntries(entries, matches)
     };
   });
 
@@ -1375,7 +1548,7 @@ async function getWorldCupData() {
     },
     fetchedAt: new Date().toISOString(),
     matches,
-    standings: normalizeStandings(standings),
+    standings: normalizeStandings(standings, matches),
     playerLeaderboards,
     playerRatings
   };
@@ -1433,6 +1606,15 @@ const server = createServer(async (request, response) => {
   await serveStatic(request, response);
 });
 
-server.listen(port, host, () => {
-  console.log(`World Cup schedule site running at http://${host}:${port}`);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  server.listen(port, host, () => {
+    console.log(`World Cup schedule site running at http://${host}:${port}`);
+  });
+}
+
+export {
+  applyHeadToHeadTiebreakers,
+  compareProjectedStandings,
+  normalizeStandings,
+  rankGroupEntries
+};
